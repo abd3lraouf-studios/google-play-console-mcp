@@ -34,6 +34,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from google_play_console_mcp import keychain
 from google_play_console_mcp.errors import ValidationError
 
 EXECUTABLE = "google-play-console-mcp"
@@ -107,8 +108,16 @@ def build_server_args(*, read_only: bool = False) -> list[str]:
     return ["--read-only"] if read_only else []
 
 
-def build_server_env(*, credentials: str | Path | None = None) -> dict[str, str]:
-    """Environment the registered server is launched with."""
+def build_server_env(
+    *, credentials: str | Path | None = None, use_keychain: bool = False
+) -> dict[str, str]:
+    """Environment the registered server is launched with.
+
+    With ``use_keychain`` the key is moved into the OS secret store and the
+    returned environment is empty: nothing about the credential is written into
+    an agent's config file, which is a plain-text file that often lives in a
+    dotfiles repository.
+    """
     if credentials is None:
         return {}
     path = Path(credentials).expanduser()
@@ -120,7 +129,33 @@ def build_server_env(*, credentials: str | Path | None = None) -> dict[str, str]
                 "downloaded from the Google Cloud console."
             ),
         )
+    if use_keychain:
+        _store_in_keychain(path)
+        return {}
     return {CREDENTIALS_ENV: str(path.resolve())}
+
+
+def _store_in_keychain(path: Path) -> None:
+    """Put the key at ``path`` into the OS secret store."""
+    raw = path.read_text()
+    try:
+        info = json.loads(raw)
+    except json.JSONDecodeError:
+        raise ValidationError(
+            f"Not a JSON key file: {path}",
+            remedy="Pass the service account JSON key downloaded from the Google Cloud console.",
+        ) from None
+    try:
+        keychain.store(json.dumps(info))
+    except keychain.KeychainUnavailableError as exc:
+        raise ValidationError(
+            str(exc),
+            remedy=(
+                "Drop --keychain to pass the key by environment variable instead, "
+                "or unlock the OS secret store and retry."
+            ),
+        ) from exc
+    print(f"Stored the key in {keychain.backend_name()}; it is not written into any config file.")
 
 
 def build_add_mcp_argv(
@@ -199,13 +234,14 @@ def install(
     yes: bool = False,
     read_only: bool = False,
     credentials: str | Path | None = None,
+    use_keychain: bool = False,
     prefer_uvx: bool = False,
     dry_run: bool = False,
 ) -> int:
     """Register this server with the selected agents. Returns an exit code."""
     target = resolve_launch_target(prefer_uvx=prefer_uvx)
     server_args = build_server_args(read_only=read_only)
-    server_env = build_server_env(credentials=credentials)
+    server_env = build_server_env(credentials=credentials, use_keychain=use_keychain)
 
     npx = shutil.which("npx")
     if npx is None:
@@ -297,6 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Service account JSON key to pass as {CREDENTIALS_ENV}.",
     )
     parser.add_argument(
+        "--keychain",
+        action="store_true",
+        help="Store --credentials in the OS keychain instead of in the agent config file.",
+    )
+    parser.add_argument(
         "--uvx",
         action="store_true",
         help="Register 'uvx google-play-console-mcp' instead of this install's path.",
@@ -321,6 +362,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             yes=args.yes,
             read_only=args.read_only,
             credentials=args.credentials,
+            use_keychain=args.keychain,
             prefer_uvx=args.uvx,
             dry_run=args.dry_run,
         )

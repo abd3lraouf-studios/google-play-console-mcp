@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "google-play-console-mcp"
-version = "0.2.1"
+version = "0.3.0"
 description = "MCP server for Google Play Console: 169 tools for releases, Android vitals, earnings, ASO and store assets, with a confirmation gate on destructive writes"
 readme = "README.md"
 license = "Apache-2.0"
@@ -67,6 +67,10 @@ dependencies = [
     # secure floor so the CVE-2026-32597 fix ships in published metadata,
     # not just in this repo's lockfile/uv resolution.
     "pyjwt[crypto]>=2.13.0",
+    # OS keychain storage for service-account keys. Already present as a
+    # transitive dependency of fastmcp, but declared directly because
+    # google_play_console_mcp.keychain imports it in its own right.
+    "keyring>=25.7.0",
 ]
 
 [project.optional-dependencies]

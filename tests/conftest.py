@@ -75,6 +75,29 @@ def confirm_via_gate(tool: Any, /, **kwargs: Any) -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_ambient_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep credential resolution off the developer's own machine state.
+
+    Two of the resolution sources live outside the test process: an entry in the
+    OS keychain, and Application Default Credentials. Without this, whether
+    "no credentials configured" actually resolves to nothing depends on who ran
+    `gcloud auth application-default login` last, so the same suite passes on
+    one laptop and fails on another. A test that wants either source asks for it
+    explicitly.
+    """
+    from google_play_console_mcp import credentials as creds_mod
+    from google_play_console_mcp import keychain
+
+    def _no_backend() -> None:
+        raise keychain.KeychainUnavailableError("no keychain in tests")
+
+    # Patched at the backend seam rather than at keychain.load, so a test that
+    # wants a working store simply replaces the same attribute with a fake.
+    monkeypatch.setattr(keychain, "_keyring", _no_backend)
+    monkeypatch.delenv(creds_mod.USE_ADC_ENV, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_shared_state() -> Generator[None, None, None]:
     """Restore the module-level shared state after each test to avoid order dependence."""
     from google_play_console_mcp import server

@@ -890,13 +890,14 @@ wheels = [
 
 [[package]]
 name = "google-play-console-mcp"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "google-cloud-storage" },
+    { name = "keyring" },
     { name = "play-store-scraper-ng" },
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -924,6 +925,7 @@ requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.199.0" },
     { name = "google-auth", specifier = ">=2.56.3" },
     { name = "google-cloud-storage", specifier = ">=3.13.1" },
+    { name = "keyring", specifier = ">=25.7.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.3.1" },
     { name = "play-store-scraper-ng", specifier = ">=0.1.8" },
     { name = "pydantic", specifier = ">=2.13.4" },

@@ -11,6 +11,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-23
+
+### Added
+
+- **Credentials in the OS keychain.** `google-play-console-mcp credentials set
+  key.json` stores a service-account key in the macOS Keychain, Windows
+  Credential Locker, or a Freedesktop Secret Service on Linux, and the server
+  reads it from there. `credentials show` reports what is configured without
+  printing any of it, `credentials delete` removes it, and `credentials adc`
+  explains user OAuth. The key never appears in a terminal, a log line, or a
+  shell history entry: `set` reads from a file or stdin.
+- **`install --keychain`** files the key in the keychain instead of writing a
+  path into the agent's config file — that file is plain text and often lives in
+  a dotfiles repository.
+- **User OAuth, via Application Default Credentials.** Setting
+  `GOOGLE_PLAY_MCP_USE_ADC=1` (or passing `--use-adc`) lets the server
+  authenticate with the credentials from `gcloud auth application-default
+  login`, and with the metadata server on GCE, Cloud Run and GKE. No OAuth code
+  ships here — no client secret, no redirect listener, no token file — because
+  `google.auth.default()` already does all of it.
+
+  **Off by default, deliberately.** Every other source is specific to this
+  server: an argument passed to it, or a keychain entry under its own service
+  name. ADC is ambient machine state shared with every Google tool, and on a
+  developer laptop it is usually a personal account left behind by an unrelated
+  `gcloud` login. Falling back to it silently would let this server publish a
+  release as whoever logged in last, with nothing in the invocation to say so.
+
+  User credentials are scoped at login, not at use, so the login has to name the
+  scopes — `credentials adc` prints the exact command.
+
+### Changed
+
+- Credential resolution order is now: `--credentials` argument, then
+  `GOOGLE_APPLICATION_CREDENTIALS` / `GOOGLE_PLAY_STORE_CREDENTIALS`, then the
+  keychain, then ADC if enabled. Explicit arguments still win, so nothing that
+  worked before changes.
+- The "no valid credentials" errors now name every source, including the two
+  new ones.
+
+### Dependencies
+
+- Declared `keyring>=25.7.0` directly. It was already installed for every user
+  as a transitive dependency of `fastmcp`, so the dependency tree is unchanged.
+
 ## [0.2.1] - 2026-08-23
 
 ### Fixed
@@ -137,7 +182,8 @@ resources.
   unmodified. Pinned to the exact beta version (not an open range) since
   FastMCP 4 isn't GA yet; `stable` is unaffected (still capped `<4.0`).
 
-[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.3.0
 [0.2.1]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.1
 [0.2.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.1.0

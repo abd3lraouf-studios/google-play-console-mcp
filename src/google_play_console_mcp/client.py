@@ -416,8 +416,7 @@ class PlayStoreClient(
 
             if not credentials:
                 raise PlayStoreClientError(
-                    "No valid credentials found. Set GOOGLE_APPLICATION_CREDENTIALS (path) "
-                    "or GOOGLE_PLAY_STORE_CREDENTIALS (JSON or path)."
+                    "No valid credentials found. Set GOOGLE_APPLICATION_CREDENTIALS (path) or GOOGLE_PLAY_STORE_CREDENTIALS (JSON or path), store a key with `google-play-console-mcp credentials set`, or enable user OAuth with GOOGLE_PLAY_MCP_USE_ADC=1 (`google-play-console-mcp credentials adc`)."
                 )
 
             self._service = build(

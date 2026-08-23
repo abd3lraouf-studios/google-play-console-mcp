@@ -26,6 +26,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from google_play_console_mcp.client import PlayStoreClient, PlayStoreClientError
+from google_play_console_mcp.credentials import USE_ADC_ENV
+from google_play_console_mcp.credentials_cli import run_cli as run_credentials_cli
 from google_play_console_mcp.edits import READ_ONLY_HTTP_METHODS
 from google_play_console_mcp.errors import PlayConsoleError
 from google_play_console_mcp.guards import (
@@ -6037,6 +6039,8 @@ def main(argv: list[str] | None = None) -> None:
     # stdio to it, so the server can never sit behind a required subcommand.
     if args_list and args_list[0] == "install":
         raise SystemExit(run_install_cli(args_list[1:]))
+    if args_list and args_list[0] == "credentials":
+        raise SystemExit(run_credentials_cli(args_list[1:]))
 
     parser = argparse.ArgumentParser(description="Google Play Console MCP Server")
     parser.add_argument(
@@ -6067,7 +6071,18 @@ def main(argv: list[str] | None = None) -> None:
         default=_env_read_only(),
         help="Disable all write operations (or set GOOGLE_PLAY_MCP_READ_ONLY=1)",
     )
+    parser.add_argument(
+        "--use-adc",
+        action="store_true",
+        help=(
+            "Allow Application Default Credentials — gcloud user OAuth, or a "
+            f"metadata server (or set {USE_ADC_ENV}=1)"
+        ),
+    )
     args = parser.parse_args(args_list)
+
+    if args.use_adc:
+        os.environ[USE_ADC_ENV] = "1"
 
     if args.credentials:
         os.environ["GOOGLE_PLAY_STORE_CREDENTIALS"] = args.credentials

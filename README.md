@@ -127,6 +127,39 @@ nests the same entry under `servers`, Zed under `context_servers`:
 
 ### Credentials
 
+Store the key in your OS keychain — macOS Keychain, Windows Credential Locker,
+or a Freedesktop Secret Service on Linux — instead of leaving it on disk or
+naming its path in an agent config file:
+
+```bash
+google-play-console-mcp credentials set service-account.json
+google-play-console-mcp credentials show     # what is configured; prints no secrets
+```
+
+`install --credentials key.json --keychain` does both in one step: files the key
+in the keychain and writes nothing about it into any config file.
+
+Environment variables still work and take precedence — `GOOGLE_APPLICATION_CREDENTIALS`
+(path) or `GOOGLE_PLAY_STORE_CREDENTIALS` (path or inline JSON) — which is what
+you want in CI, in Docker, and anywhere a keychain does not exist.
+
+**User OAuth instead of a service account:**
+
+```bash
+google-play-console-mcp credentials adc   # prints the exact login command
+```
+
+It authenticates with `gcloud auth application-default login`, so there is no
+client secret or redirect to configure. It is **off unless you set
+`GOOGLE_PLAY_MCP_USE_ADC=1`** (or pass `--use-adc`): those credentials are
+ambient machine state shared with every Google tool, and a server that can ship
+a release should never quietly inherit whoever ran `gcloud` last.
+
+> Resolution order: `--credentials`, then the environment variables, then the
+> keychain, then ADC if enabled.
+
+#### Setting up the service account
+
 1. **Service account** — Google Cloud Console → enable the Google Play Android
    Developer API → create a service account → download the JSON key.
 2. **Invite it** in Play Console → Users and permissions.

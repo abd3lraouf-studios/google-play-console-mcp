@@ -257,3 +257,50 @@ class TestServerCliRouting:
         monkeypatch.setattr(server.mcp, "run", lambda **kw: started.update(kw))
         server.main([])
         assert started == {"transport": "stdio"}
+
+
+class TestKeychainOption:
+    """--keychain moves the key into the OS store and out of the config file."""
+
+    def test_key_is_stored_and_env_stays_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        stored: dict[str, Any] = {}
+        monkeypatch.setattr(inst.keychain, "store", lambda secret, **_kw: stored.update(raw=secret))
+        monkeypatch.setattr(inst.keychain, "backend_name", lambda: "test.Keyring")
+        key = tmp_path / "k.json"
+        key.write_text(json.dumps({"type": "service_account", "client_email": "a@b.com"}))
+
+        env = inst.build_server_env(credentials=key, use_keychain=True)
+
+        assert env == {}, "the credential must not reach the agent config"
+        assert json.loads(stored["raw"])["client_email"] == "a@b.com"
+        assert "test.Keyring" in capsys.readouterr().out
+
+    def test_non_json_key_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(inst.keychain, "store", lambda *_a, **_k: None)
+        key = tmp_path / "k.json"
+        key.write_text("not json")
+        with pytest.raises(ValidationError, match="Not a JSON key file"):
+            inst.build_server_env(credentials=key, use_keychain=True)
+
+    def test_unavailable_keychain_suggests_the_env_var(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        def boom(*_a: Any, **_k: Any) -> None:
+            raise inst.keychain.KeychainUnavailableError("locked")
+
+        monkeypatch.setattr(inst.keychain, "store", boom)
+        key = tmp_path / "k.json"
+        key.write_text(json.dumps({"type": "service_account"}))
+        with pytest.raises(ValidationError) as excinfo:
+            inst.build_server_env(credentials=key, use_keychain=True)
+        assert "--keychain" in excinfo.value.remedy
+
+    def test_cli_flag_is_passed_through(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: dict[str, Any] = {}
+        monkeypatch.setattr(inst, "install", lambda **kw: seen.update(kw) or 0)
+        assert inst.run_cli(["--keychain"]) == 0
+        assert seen["use_keychain"] is True
