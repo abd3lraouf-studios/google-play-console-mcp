@@ -65,20 +65,53 @@ missing and how to fix it.
 
 ## Install
 
+One line. It registers the server with the agents you pick:
+
 ```bash
-uvx google-play-console-mcp          # no install
-pipx install google-play-console-mcp # or install it
-pip install google-play-console-mcp
+uvx google-play-console-mcp install
 ```
 
-## Configure
+You get a checklist of the agents found on your machine — Claude Code, Claude
+Desktop, Cursor, VS Code, Codex, Gemini CLI, Windsurf, Zed, Cline, Goose,
+OpenCode and [11 more](https://github.com/neon-solutions/add-mcp#supported-agents)
+— and it writes the right config file, in the right shape, for each one. No
+JSON to paste, no path to look up.
 
-Add to your MCP client (`.mcp.json`, `claude_desktop_config.json`, …):
+```bash
+# pick agents up front and skip the prompts
+uvx google-play-console-mcp install -a claude-code -a cursor -y
+
+# read-only, with credentials wired in
+uvx google-play-console-mcp install --read-only --credentials ~/sa-key.json
+
+# see the exact command without running it
+uvx google-play-console-mcp install --dry-run
+```
+
+`install` keeps the server itself out of your way: `uvx` fetches it on demand,
+so there is nothing to upgrade by hand. To keep a permanent copy instead:
+
+```bash
+uv tool install google-play-console-mcp   # then: google-play-console-mcp install
+pipx install google-play-console-mcp
+pip  install google-play-console-mcp
+```
+
+The wiring is done by [add-mcp](https://github.com/neon-solutions/add-mcp)
+(Apache-2.0), which tracks each agent's config format so this server does not
+have to. It runs under `npx`; if you have no Node.js, `install` prints the exact
+config block to paste instead of failing.
+
+<details>
+<summary>Configure by hand</summary>
+
+Add to your MCP client (`.mcp.json`, `claude_desktop_config.json`, …). VS Code
+nests the same entry under `servers`, Zed under `context_servers`:
 
 ```json
 {
   "mcpServers": {
-    "google-play": {
+    "google-play-console": {
       "command": "uvx",
       "args": ["google-play-console-mcp"],
       "env": {
@@ -89,6 +122,8 @@ Add to your MCP client (`.mcp.json`, `claude_desktop_config.json`, …):
   }
 }
 ```
+
+</details>
 
 ### Credentials
 

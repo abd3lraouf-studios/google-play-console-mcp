@@ -8,6 +8,35 @@
 
 ## Installation
 
+The one-line installer registers the server with your coding agents:
+
+```bash
+uvx google-play-console-mcp install
+```
+
+It offers a checklist of the agents found on your machine — Claude Code, Claude
+Desktop, Cursor, VS Code, Codex, Gemini CLI, Windsurf, Zed, Cline, Goose,
+OpenCode and 11 more — and writes the correct config file for each. The wiring
+is delegated to [add-mcp](https://github.com/neon-solutions/add-mcp), which runs
+under `npx`; without Node.js installed, the command prints the config block to
+paste by hand instead of failing.
+
+| Flag | Effect |
+|---|---|
+| `-a, --agent AGENT` | Register with a named agent; repeat for several |
+| `--all` | Register with every supported agent |
+| `-y, --yes` | Skip confirmation prompts |
+| `--project` | Write project-level config here instead of user-level |
+| `--read-only` | Register the server with writes disabled |
+| `--credentials PATH` | Pass a service account key as `GOOGLE_APPLICATION_CREDENTIALS` |
+| `--name NAME` | Register under a different server name |
+| `--uvx` | Register `uvx google-play-console-mcp` rather than this install's path |
+| `--dry-run` | Print the `add-mcp` command and exit |
+
+Run `npx add-mcp list-agents` for the full agent list.
+
+### Getting the server itself
+
 === "uvx (Recommended)"
 
     ```bash

@@ -11,6 +11,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-23
+
+### Added
+
+- **One-line installer** — `uvx google-play-console-mcp install` registers the
+  server with your coding agents. With no `--agent` it detects the agents on the
+  machine and offers them for selection; `-a/--agent` names them directly,
+  `--all` takes every one. Flags cover scope (`--project`, default user-level),
+  `--read-only`, `--credentials`, `--name`, `--uvx` and `--dry-run`.
+  Claude Code, Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, Windsurf,
+  Zed, Cline, Goose, OpenCode and 10 more are supported, each with its own
+  config path, root key (`mcpServers` / `servers` / `context_servers`) and
+  format (JSON, TOML, YAML).
+
+  The wiring is delegated to [add-mcp](https://github.com/neon-solutions/add-mcp)
+  (Apache-2.0), invoked through `npx`. It is not vendored or redistributed — it
+  is fetched at run time only when you run `install`. With no Node.js present
+  the command prints the exact config block to paste and exits non-zero rather
+  than failing silently.
+
+  The registered launch command is chosen deliberately: an absolute path to a
+  durably installed console script, because GUI agents such as Claude Desktop
+  and Zed start from a login environment whose `PATH` usually lacks
+  `~/.local/bin`. When `install` is itself running from a uv cache — the
+  `uvx ... install` case — it registers the `uvx google-play-console-mcp` runner
+  form instead, since the cache path is pruned and its hash changes.
+
+### Changed
+
+- The bare invocation is unchanged: MCP clients launch the executable with no
+  arguments and speak stdio to it, so the server never sits behind a required
+  subcommand.
+
 ## [0.1.0] - 2026-08-23
 
 Initial release. 169 tools across five data planes, 2 MCP prompts and 4 MCP
@@ -91,5 +124,6 @@ resources.
   unmodified. Pinned to the exact beta version (not an open range) since
   FastMCP 4 isn't GA yet; `stable` is unaffected (still capped `<4.0`).
 
-[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.1.0
