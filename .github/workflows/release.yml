@@ -1,0 +1,185 @@
+name: Release
+
+# Publishes to PyPI via Trusted Publishing (OIDC). No API token exists anywhere
+# in this repository, so there is none to leak: PyPI verifies the workflow's
+# signed identity claim instead. Setup is one form on pypi.org — see
+# docs/releasing.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.26"
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Type check
+        run: uv run mypy src/
+
+      # The live-API and subprocess tests need real credentials and a PATH the
+      # runner does not have. Everything else must pass, at full coverage.
+      - name: Test
+        run: >-
+          uv run pytest -q
+          --ignore=tests/test_live_api.py
+          --ignore=tests/test_integration_credentials.py
+          --cov=google_play_console_mcp --cov-report=term
+          --cov-fail-under=100
+
+      - name: Tag must match the packaged version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(uv run python -c "import importlib.metadata as m; print(m.version('google-play-console-mcp'))")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG does not match packaged version $PKG"
+            exit 1
+          fi
+          echo "tag and package agree on $PKG"
+
+  build:
+    name: Build distributions
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.26"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      # A wheel that ships without its NOTICE and LICENSES/ would breach both
+      # the Apache-2.0 NOTICE clause and the MIT terms of the code it contains.
+      # Fail the release here rather than discover it after publishing.
+      - name: Wheel carries the licence files
+        run: |
+          uv run python - <<'PY'
+          import pathlib, sys, zipfile
+          wheel = next(pathlib.Path("dist").glob("*.whl"))
+          names = zipfile.ZipFile(wheel).namelist()
+          required = ["LICENSE", "NOTICE"]
+          missing = [r for r in required if not any(n.endswith(f"licenses/{r}") for n in names)]
+          if not any("licenses/LICENSES/" in n for n in names):
+              missing.append("LICENSES/ directory")
+          if missing:
+              print("::error::wheel is missing:", ", ".join(missing))
+              print("\n".join(n for n in names if "dist-info" in n))
+              sys.exit(1)
+          print(f"{wheel.name} carries LICENSE, NOTICE and LICENSES/")
+          PY
+
+      - name: Check metadata renders on PyPI
+        run: uvx twine check --strict dist/*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/google-play-console-mcp
+    permissions:
+      id-token: write # the OIDC claim PyPI verifies; nothing else is needed
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/google-play-console-mcp
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+
+  github-release:
+    name: Attach artifacts to the GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
