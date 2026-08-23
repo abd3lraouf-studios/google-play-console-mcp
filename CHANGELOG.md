@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The release workflow installs the built wheel into a clean environment,
+  imports it and runs its console script before anything is published. Every
+  other check reads the distribution from the outside — its file list and its
+  metadata — and none of them notices a module that failed to be packaged: a
+  wheel missing `data_safety_ids.py` passes the licence check *and*
+  `twine check --strict`, then raises `ModuleNotFoundError` on a user's first
+  import. This has to run before the upload, because a PyPI version number can
+  never be reused.
+
+- Removed the TestPyPI rehearsal job, its `workflow_dispatch` target input, the
+  `testpypi` environment, and the section of `docs/releasing.md` that
+  prescribed it. No trusted publisher was ever registered on test.pypi.org, so
+  the step failed with `invalid-publisher` on every release for five releases
+  while real publishing succeeded. A documented step that always fails is worse
+  than no step. What it was protecting against is covered directly by the
+  install check above.
+
+- The `pypi` deployment environment now requires a reviewer, so a tag push
+  pauses for human approval instead of publishing straight through.
+
 ## [0.4.0] - 2026-08-24
 
 ### Added

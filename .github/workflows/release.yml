@@ -4,19 +4,18 @@ name: Release
 # in this repository, so there is none to leak: PyPI verifies the workflow's
 # signed identity claim instead. Setup is one form on pypi.org — see
 # docs/releasing.md.
+#
+# There is deliberately no TestPyPI rehearsal. It was never registered as a
+# trusted publisher, so the step failed on every release for five releases while
+# real publishing worked. What it would have caught -- a wheel that does not
+# install -- is caught here instead, by installing the artefact before anything
+# is published, with no second account or namespace to keep in sync.
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      target:
-        description: Where to publish
-        required: true
-        default: testpypi
-        type: choice
-        options: [testpypi, pypi]
 
 permissions:
   contents: read
@@ -132,38 +131,50 @@ jobs:
           print(f"Metadata-Version {version} is fine")
           PY
 
+      # The checks above read the wheel's file list and its metadata. Neither
+      # notices a module that failed to be packaged, an import that only works
+      # from the source tree, a broken console script, or a dependency that
+      # resolves in an editable install and not from an index. Installing the
+      # artefact into a clean environment does, and it does so *before* the
+      # version number is spent -- a PyPI version can never be reused.
+      - name: The built wheel installs and imports from a clean environment
+        run: |
+          WHEEL=$(ls dist/*.whl)
+          uv run --isolated --no-project --with "$WHEEL" python - <<'PY'
+          import asyncio, importlib.metadata as md
+
+          import google_play_console_mcp.server as server
+          from google_play_console_mcp import body_validation, data_safety, discovery
+
+          tools = asyncio.run(server.mcp.list_tools())
+          assert tools, "the packaged server registers no tools"
+          assert discovery.publisher_spec() is not None, "discovery document unreadable"
+          assert data_safety.KNOWN_ID_TOKENS, "the question-ID snapshot did not ship"
+          assert body_validation.validate_request_body(
+              "androidpublisher.applications.dataSafety", {"nope": 1}
+          ), "body validation is inert in the packaged build"
+
+          print(f"{md.version('google-play-console-mcp')}: "
+                f"{len(tools)} tools, imports clean from the wheel")
+          PY
+
+      # The console script is a separate failure mode from the imports: it
+      # comes from [project.scripts] and can be wrong while every module is fine.
+      - name: The console script is callable
+        run: |
+          WHEEL=$(ls dist/*.whl)
+          uv run --isolated --no-project --with "$WHEEL" google-play-console-mcp --help > /dev/null
+          echo "console script runs"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
           path: dist/
           if-no-files-found: error
 
-  testpypi:
-    name: Publish to TestPyPI
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/google-play-console-mcp
-    permissions:
-      id-token: write # the OIDC claim PyPI verifies; nothing else is needed
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dist
-          path: dist/
-
-      # Pin by commit SHA. v1.14.2's annotated-tag object has no ghcr image,
-      # so pinning the tag object's own SHA makes the Docker pull fail with
-      # "manifest unknown".
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
   pypi:
     name: Publish to PyPI
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     environment:
