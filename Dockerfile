@@ -6,7 +6,12 @@ WORKDIR /build
 # Install uv for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 /uv /usr/local/bin/uv
 
-COPY pyproject.toml uv.lock README.md ./
+# LICENSE and LICENSES/ are not optional extras here: pyproject force-includes
+# them into the wheel, so the build fails without them. A published image
+# redistributes this code and the third-party code under LICENSES/, and both
+# licences require their texts to travel with it.
+COPY pyproject.toml uv.lock README.md LICENSE ./
+COPY LICENSES/ LICENSES/
 COPY src/ src/
 
 # Sync straight from the lockfile into the final runtime venv path (so

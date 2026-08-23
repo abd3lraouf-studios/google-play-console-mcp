@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-23
+
+### Fixed
+
+- **The Docker image now builds.** It never had: `pyproject.toml` force-includes
+  `LICENSE` and `LICENSES/` into the wheel, but the Dockerfile copied neither
+  into its build stage and `.dockerignore` excluded `LICENSE` outright, so
+  `uv sync` failed with `Forced include not found: /build/LICENSES` on every
+  commit since the first one. Both are copied now — which is also the correct
+  outcome on its own terms, since a published image redistributes this code and
+  the third-party code under `LICENSES/`, and both licences require their texts
+  to travel with it.
+
 ## [0.2.0] - 2026-08-23
 
 ### Added
@@ -124,6 +137,7 @@ resources.
   unmodified. Pinned to the exact beta version (not an open range) since
   FastMCP 4 isn't GA yet; `stable` is unaffected (still capped `<4.0`).
 
-[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.1
 [0.2.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.1.0
