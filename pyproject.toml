@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "google-play-console-mcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP server for Google Play Console: 169 tools for releases, Android vitals, earnings, ASO and store assets, with a confirmation gate on destructive writes"
 readme = "README.md"
 license = "Apache-2.0"
@@ -91,7 +91,7 @@ google-play-console-mcp = "google_play_console_mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/abd3lraouf-studios/google-play-console-mcp"
-Documentation = "https://abd3lraouf-studios.github.io/google-play-console-mcp/"
+Documentation = "https://github.com/abd3lraouf-studios/google-play-console-mcp/tree/main/docs"
 Repository = "https://github.com/abd3lraouf-studios/google-play-console-mcp"
 Issues = "https://github.com/abd3lraouf-studios/google-play-console-mcp/issues"
 Changelog = "https://github.com/abd3lraouf-studios/google-play-console-mcp/blob/main/CHANGELOG.md"

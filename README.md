@@ -238,7 +238,7 @@ See [Write safety](docs/write-safety.md).
 
 ## Tools
 
-169 tools. Full reference in [the docs](https://abd3lraouf-studios.github.io/google-play-console-mcp/).
+169 tools. Full reference in [docs/](https://github.com/abd3lraouf-studios/google-play-console-mcp/tree/main/docs).
 
 | Area | Examples |
 |---|---|

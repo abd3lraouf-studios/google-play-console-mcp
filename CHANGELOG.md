@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-23
+
+### Changed
+
+- Dropped the GitHub Pages documentation site. The docs live in `docs/` in this
+  repository and are read there; the `Documentation` URL in the package
+  metadata now points at that directory instead of a published site. Removes
+  `.github/workflows/docs.yml` and `mkdocs.yml`.
+
 ## [0.3.0] - 2026-08-23
 
 ### Added
@@ -182,7 +191,8 @@ resources.
   unmodified. Pinned to the exact beta version (not an open range) since
   FastMCP 4 isn't GA yet; `stable` is unaffected (still capped `<4.0`).
 
-[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.3.0
 [0.2.1]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.1
 [0.2.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.0
