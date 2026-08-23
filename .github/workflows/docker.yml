@@ -118,6 +118,13 @@ jobs:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
           format: spdx-json
           output-file: sbom.spdx.json
+          # Defaults to true on a tag build, which attaches the SBOM to the
+          # GitHub release and so needs `contents: write`. This job builds and
+          # pushes an image; widening it to write the repository as well buys
+          # one convenience for a large amount of blast radius. The SBOM still
+          # ships twice over — as a workflow artifact below, and as a signed
+          # attestation on the image itself.
+          upload-release-assets: false
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
