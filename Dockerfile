@@ -30,6 +30,14 @@ LABEL org.opencontainers.image.description="MCP server for Google Play Developer
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.title="google-play-console-mcp"
 
+# Apply Alpine security patches released since the base image was built. The
+# FROM above is digest-pinned for reproducibility, which also pins its known
+# CVEs until upstream cuts a new image: libssl3/libcrypto3 3.5.7-r0 shipped
+# with CVE-2026-14456 open. A published image is worth more patched than
+# bit-identical, so the trade is made deliberately here rather than left
+# implicit.
+RUN apk --no-cache upgrade
+
 # Security hardening: non-root user, no shell
 RUN addgroup -S mcp && \
     adduser -S -G mcp -h /app -s /sbin/nologin mcp
