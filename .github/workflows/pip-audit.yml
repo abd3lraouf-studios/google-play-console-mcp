@@ -1,4 +1,4 @@
-name: Safety Dependency Check
+name: Dependency Audit
 
 on:
   push:
@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  safety:
-    name: Safety Check
+  audit:
+    name: pip-audit
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -39,8 +39,9 @@ jobs:
       - name: Export requirements
         run: uv export --no-hashes --format requirements-txt > requirements.txt
 
-      - name: Run Safety check
-        uses: pyupio/safety-action@2591cf2f3e67ba68b923f4c92f0d36e281c65023 # v1.0.1
-        with:
-          api-key: ${{ secrets.SAFETY_API_KEY }}
-          args: --full-report
+      # pip-audit is PyPA's own scanner and reads the free PyPI Advisory
+      # Database, so this needs no account and no secret. It replaced
+      # pyupio/safety-action, which requires a paid API key and therefore
+      # failed on every run rather than ever reporting on a dependency.
+      - name: Audit dependencies
+        run: uvx --from "pip-audit==2.10.1" pip-audit --requirement requirements.txt --strict
