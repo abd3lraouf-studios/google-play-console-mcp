@@ -131,16 +131,13 @@ def _rollout_note(rollout_percentage: float, track: str) -> list[str]:
     """Warnings a human should see before a release changes who receives it."""
     notes: list[str] = []
     if is_production_track(track):
-        notes.append(
-            f"Track '{track}' is PRODUCTION — this reaches real users of the live app."
-        )
+        notes.append(f"Track '{track}' is PRODUCTION — this reaches real users of the live app.")
     if rollout_percentage >= 100.0:
         notes.append("Rollout is 100%: every eligible user on this track receives it at once.")
     return notes
 
-def _report_tool(
-    kind: str, package_name: str, month: str, dimension: str
-) -> dict[str, Any]:
+
+def _report_tool(kind: str, package_name: str, month: str, dimension: str) -> dict[str, Any]:
     """Shared body for the per-app bulk-report tools.
 
     Rows are collapsed to per-dimension totals: a month of country-sliced
@@ -163,6 +160,7 @@ def _report_tool(
         "freshness": report.freshness.model_dump(),
         "source_object": report.source_object,
     }
+
 
 def get_client_from_context() -> PlayStoreClient:
     """Resolve a PlayStoreClient for the current request.
@@ -441,16 +439,27 @@ def deploy_app_multilang(
     op = Operation(
         tool="deploy_app_multilang",
         target=target_for(package_name),
-        params={"track": track, "file": Path(file_path), "rollout_percentage": rollout_percentage,
-            "locales": sorted(release_notes)},
-        call_args={"package_name": package_name, "track": track, "file_path": file_path,
-            "release_notes": release_notes, "rollout_percentage": rollout_percentage},
+        params={
+            "track": track,
+            "file": Path(file_path),
+            "rollout_percentage": rollout_percentage,
+            "locales": sorted(release_notes),
+        },
+        call_args={
+            "package_name": package_name,
+            "track": track,
+            "file_path": file_path,
+            "release_notes": release_notes,
+            "rollout_percentage": rollout_percentage,
+        },
     )
     preview = Preview(
         summary=f"Upload {Path(file_path).name} to track '{track}' with notes in "
         f"{len(release_notes)} locale(s).",
-        changes=[Change("track", None, track),
-         Change("rollout", None, f"{rollout_percentage:g}% of eligible users")],
+        changes=[
+            Change("track", None, track),
+            Change("rollout", None, f"{rollout_percentage:g}% of eligible users"),
+        ],
         warnings=_rollout_note(rollout_percentage, track),
         reversal="halt_release stops the rollout; it cannot un-deliver installs already served.",
     )
@@ -648,8 +657,7 @@ def update_rollout(
     )
     preview = Preview(
         summary=(
-            f"Change the rollout of version {version_code} on '{track}' to "
-            f"{rollout_percentage:g}%."
+            f"Change the rollout of version {version_code} on '{track}' to {rollout_percentage:g}%."
         ),
         changes=[Change("rollout", None, f"{rollout_percentage:g}% of eligible users")],
         warnings=_rollout_note(rollout_percentage, track),
@@ -974,7 +982,8 @@ def refund_order(
         call_args={"package_name": package_name, "order_id": order_id, "revoke": revoke},
     )
     preview = Preview(
-        summary=f"Refund order {order_id}" + (" and revoke the user's entitlement." if revoke else "."),
+        summary=f"Refund order {order_id}"
+        + (" and revoke the user's entitlement." if revoke else "."),
         changes=[Change("entitlement", "active", "revoked" if revoke else "unchanged")],
         warnings=["This moves real money. A refund cannot be reversed through the API."],
         reversal="None — a refund is final.",
@@ -1078,14 +1087,19 @@ def revoke_subscription_purchase(
         tool="revoke_subscription_purchase",
         target=target_for(package_name),
         params={"purchase_token": purchase_token, "refund_type": refund_type},
-        call_args={"package_name": package_name, "purchase_token": purchase_token,
-            "refund_type": refund_type},
+        call_args={
+            "package_name": package_name,
+            "purchase_token": purchase_token,
+            "refund_type": refund_type,
+        },
     )
     preview = Preview(
         summary=f"Revoke this subscription purchase with a {refund_type} refund.",
         changes=[Change("subscription", "active", "revoked")],
-        warnings=["This moves real money and ends the subscriber's access immediately.",
-         "It cannot be reversed through the API."],
+        warnings=[
+            "This moves real money and ends the subscriber's access immediately.",
+            "It cannot be reversed through the API.",
+        ],
         reversal="None — the subscriber must purchase again.",
     )
     if early := _gate(op, preview, confirm=confirm, confirmation_token=confirmation_token):
@@ -3869,16 +3883,26 @@ def batch_deploy(
     op = Operation(
         tool="batch_deploy",
         target=target_for(package_name),
-        params={"file": Path(file_path), "tracks": sorted(tracks),
-            "rollout_percentages": rollout_percentages},
-        call_args={"package_name": package_name, "file_path": file_path, "tracks": tracks,
-            "release_notes": release_notes, "rollout_percentages": rollout_percentages},
+        params={
+            "file": Path(file_path),
+            "tracks": sorted(tracks),
+            "rollout_percentages": rollout_percentages,
+        },
+        call_args={
+            "package_name": package_name,
+            "file_path": file_path,
+            "tracks": tracks,
+            "release_notes": release_notes,
+            "rollout_percentages": rollout_percentages,
+        },
     )
     preview = Preview(
         summary=f"Upload {Path(file_path).name} and release it on {len(tracks)} track(s): "
         f"{', '.join(tracks)}.",
         changes=[Change("tracks", None, ", ".join(tracks))],
-        warnings=[w for t in tracks for w in _rollout_note((rollout_percentages or {}).get(t, 100.0), t)],
+        warnings=[
+            w for t in tracks for w in _rollout_note((rollout_percentages or {}).get(t, 100.0), t)
+        ],
         reversal="halt_release must be run per track.",
     )
     if early := _gate(op, preview, confirm=confirm, confirmation_token=confirmation_token):
@@ -4034,9 +4058,7 @@ def get_vitals_freshness(package_name: str, metric_set: str | None = None) -> li
     """
     client = get_client_from_context()
     try:
-        results = client.get_metric_set_freshness(
-            package_name=package_name, metric_set=metric_set
-        )
+        results = client.get_metric_set_freshness(package_name=package_name, metric_set=metric_set)
     except ReportingClientError as e:
         return [{"error": str(e)}]
     return [info.model_dump() for info in results]
@@ -4055,9 +4077,7 @@ def get_metric_set_metadata(package_name: str, metric_set: str) -> dict[str, Any
     """
     client = get_client_from_context()
     try:
-        return client.get_metric_set(
-            package_name=package_name, metric_set=metric_set
-        ).model_dump()
+        return client.get_metric_set(package_name=package_name, metric_set=metric_set).model_dump()
     except ReportingClientError as e:
         return {"error": str(e)}
 
@@ -4206,6 +4226,7 @@ def search_error_reports(
         )
     ]
 
+
 # =============================================================================
 # Publisher v3 — endpoints not covered by the inherited surface
 # =============================================================================
@@ -4244,9 +4265,7 @@ def get_country_availability(package_name: str, track: str) -> dict[str, Any]:
         Country codes, rest-of-world flag, and whether the track mirrors production
     """
     client = get_client_from_context()
-    return client.get_country_availability(
-        package_name=package_name, track=track
-    ).model_dump()
+    return client.get_country_availability(package_name=package_name, track=track).model_dump()
 
 
 @mcp.tool()
@@ -4698,6 +4717,7 @@ def delete_review_reply(
         result = client.delete_review_reply(package_name=package_name, review_id=review_id)
     return result.model_dump()
 
+
 # =============================================================================
 # Cloud Storage bulk reports — installs, ratings, earnings, search terms
 # =============================================================================
@@ -4950,6 +4970,7 @@ def get_earnings_report(month: str, package_name: str | None = None) -> dict[str
         "source_object": report.source_object,
     }
 
+
 # =============================================================================
 # Public store scraping — competitors, keywords, review history
 # =============================================================================
@@ -4988,9 +5009,7 @@ def search_store(
     """
     client = get_client_from_context()
     try:
-        apps = client.scrape_search(
-            term, country=country, language=language, num=num, price=price
-        )
+        apps = client.scrape_search(term, country=country, language=language, num=num, price=price)
     except PlayConsoleError as exc:
         return exc.to_dict()
     return {
@@ -5087,9 +5106,7 @@ def get_keyword_suggestions(
         return {
             "keyword": keyword,
             "country": country,
-            "suggestions": client.scrape_suggestions(
-                keyword, country=country, language=language
-            ),
+            "suggestions": client.scrape_suggestions(keyword, country=country, language=language),
         }
     except PlayConsoleError as exc:
         return exc.to_dict()
@@ -5121,9 +5138,7 @@ def scrape_reviews(
     """
     client = get_client_from_context()
     try:
-        page = client.scrape_reviews(
-            app_id, country=country, language=language, num=num, sort=sort
-        )
+        page = client.scrape_reviews(app_id, country=country, language=language, num=num, sort=sort)
     except PlayConsoleError as exc:
         return exc.to_dict()
     return {**page.model_dump(), "untrusted_content_note": UNTRUSTED_CONTENT_NOTE}
@@ -5174,6 +5189,7 @@ def check_aso_metadata(
         short_description=short_description,
         full_description=full_description,
     )
+
 
 # =============================================================================
 # Store-image preflight
@@ -5247,6 +5263,7 @@ def preflight_screenshot_set(
         return _preflight_screenshot_set(image_paths, image_type)
     except PlayConsoleError as exc:
         return exc.to_dict()
+
 
 # =============================================================================
 # Edit lifecycle, escape hatch, locales
@@ -5380,9 +5397,7 @@ def commit_edit(
             Change(
                 "binaries",
                 None,
-                ", ".join(
-                    str(v) for v in staged.apk_version_codes + staged.bundle_version_codes
-                )
+                ", ".join(str(v) for v in staged.apk_version_codes + staged.bundle_version_codes)
                 or "(none)",
             ),
         ]
@@ -5400,9 +5415,7 @@ def commit_edit(
             summary=f"Commit edit {edit_id}, publishing everything staged in it.",
             changes=changes,
             warnings=warnings,
-            reversal=(
-                "None directly. A committed edit is published; correct it with a new edit."
-            ),
+            reversal=("None directly. A committed edit is published; correct it with a new edit."),
             verified_by="read back from the open edit",
         )
 
@@ -5609,6 +5622,7 @@ def clone_listing_to_locale(
         )
     return result.model_dump()
 
+
 # =============================================================================
 # Resources
 # =============================================================================
@@ -5693,6 +5707,7 @@ def config_resource() -> str:
         indent=2,
     )
 
+
 # =============================================================================
 # Prompts
 # =============================================================================
@@ -5768,6 +5783,7 @@ Then report, and recommend one of:
 State which vitals were stale or missing. Do not describe a rollout as healthy
 on the strength of data that has not landed yet.
 """
+
 
 # =============================================================================
 # HTTP Endpoints for Streamable Transport

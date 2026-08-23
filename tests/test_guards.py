@@ -637,9 +637,10 @@ def test_gate_previews_then_authorises():
 
     text = require_confirmation(op, preview, confirm=False)
     assert text is not None
-    assert require_confirmation(
-        op, preview, confirm=True, confirmation_token=_token_from(text)
-    ) is None
+    assert (
+        require_confirmation(op, preview, confirm=True, confirmation_token=_token_from(text))
+        is None
+    )
 
     outcomes = [r["outcome"] for r in _audit_records()]
     assert "preview" in outcomes

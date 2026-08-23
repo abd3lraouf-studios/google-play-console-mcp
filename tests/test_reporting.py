@@ -203,9 +203,7 @@ def test_parse_row_maps_dimensions_and_metrics():
 
 def test_parse_freshness_handles_missing_block():
     assert _parse_freshness({}) == []
-    parsed = _parse_freshness(
-        {"freshnessInfo": {"freshnesses": [{"aggregationPeriod": "DAILY"}]}}
-    )
+    parsed = _parse_freshness({"freshnessInfo": {"freshnesses": [{"aggregationPeriod": "DAILY"}]}})
     assert parsed[0].aggregation_period == "DAILY"
     assert parsed[0].latest_end_time is None
 
@@ -231,7 +229,9 @@ def test_get_reporting_service_builds_with_reporting_scope():
     built = MagicMock()
     client = PlayStoreClient(credentials_json={"type": "service_account"})
     with (
-        patch("google_play_console_mcp.credentials.service_account.Credentials.from_service_account_info") as sa,
+        patch(
+            "google_play_console_mcp.credentials.service_account.Credentials.from_service_account_info"
+        ) as sa,
         patch("google_play_console_mcp.reporting.build", return_value=built) as build_mock,
     ):
         sa.return_value = MagicMock()
@@ -255,8 +255,12 @@ def test_get_reporting_service_without_credentials_raises():
 def test_get_reporting_service_wraps_build_failure():
     client = PlayStoreClient(credentials_json={"type": "service_account"})
     with (
-        patch("google_play_console_mcp.credentials.service_account.Credentials.from_service_account_info"),
-        patch("google_play_console_mcp.reporting.build", side_effect=RuntimeError("discovery down")),
+        patch(
+            "google_play_console_mcp.credentials.service_account.Credentials.from_service_account_info"
+        ),
+        patch(
+            "google_play_console_mcp.reporting.build", side_effect=RuntimeError("discovery down")
+        ),
         pytest.raises(ReportingClientError, match="Failed to initialize Reporting API client"),
     ):
         client._get_reporting_service()
@@ -335,9 +339,7 @@ def test_get_metric_set_returns_freshness():
     _vitals(service, "vitals", "crashrate").get.return_value.execute.return_value = {
         "name": f"apps/{PKG}/crashRateMetricSet",
         "freshnessInfo": {
-            "freshnesses": [
-                {"aggregationPeriod": "DAILY", "latestEndTime": "2026-08-21T00:00:00Z"}
-            ]
+            "freshnesses": [{"aggregationPeriod": "DAILY", "latestEndTime": "2026-08-21T00:00:00Z"}]
         },
     }
     info = _client(service).get_metric_set(PKG, "crash_rate")
@@ -560,7 +562,9 @@ def test_search_error_issues_parses_nested_versions():
         ]
     }
     issues = _client(service).search_error_issues(
-        PKG, filter_expression="errorIssueType = CRASH", order_by="errorReportCount desc",
+        PKG,
+        filter_expression="errorIssueType = CRASH",
+        order_by="errorReportCount desc",
         sample_report_limit=3,
     )
 

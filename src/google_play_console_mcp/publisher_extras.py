@@ -97,8 +97,7 @@ def _parse_release(data: dict[str, Any]) -> Release:
         version_name=data.get("name"),
         rollout_percentage=rollout,
         release_notes={
-            note.get("language", ""): note.get("text", "")
-            for note in data.get("releaseNotes", [])
+            note.get("language", ""): note.get("text", "") for note in data.get("releaseNotes", [])
         },
     )
 
@@ -635,9 +634,7 @@ class PublisherExtrasMixin:
             message="Subscription purchase acknowledged",
         )
 
-    def archive_subscription(
-        self, package_name: str, product_id: str
-    ) -> SubscriptionActionResult:
+    def archive_subscription(self, package_name: str, product_id: str) -> SubscriptionActionResult:
         """Archive a subscription.
 
         Play recommends archiving rather than deleting any subscription that has
@@ -742,9 +739,7 @@ class PublisherExtrasMixin:
         Returns:
             Retraction result.
         """
-        self._logger.info(
-            "Retracting review reply", package_name=package_name, review_id=review_id
-        )
+        self._logger.info("Retracting review reply", package_name=package_name, review_id=review_id)
         service = self._get_service()
 
         try:

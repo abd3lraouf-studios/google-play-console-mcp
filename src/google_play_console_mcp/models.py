@@ -969,9 +969,7 @@ class EditDescription(BaseModel):
     listing_languages: list[str] = Field(
         default_factory=list, description="Locales with a staged store listing"
     )
-    details: dict[str, Any] = Field(
-        default_factory=dict, description="Staged app-level details"
-    )
+    details: dict[str, Any] = Field(default_factory=dict, description="Staged app-level details")
     apk_version_codes: list[int] = Field(
         default_factory=list, description="APK version codes in this edit"
     )

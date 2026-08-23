@@ -132,7 +132,9 @@ def test_a_jpeg_without_a_sof_is_reported(tmp_path):
 
 def test_an_rgba_screenshot_is_rejected(tmp_path):
     """The failure this module exists to prevent: a plain PNG export is RGBA."""
-    result = preflight_image(write(tmp_path, "s.png", png_bytes(1080, 1920, RGBA)), "phoneScreenshots")
+    result = preflight_image(
+        write(tmp_path, "s.png", png_bytes(1080, 1920, RGBA)), "phoneScreenshots"
+    )
     assert result["valid"] is False
     assert "must NOT have an alpha channel" in result["errors"][0]
 
@@ -155,9 +157,9 @@ def test_an_rgba_icon_passes(tmp_path):
 
 
 def test_a_jpeg_screenshot_passes(tmp_path):
-    assert preflight_image(
-        write(tmp_path, "s.jpg", jpeg_bytes(1080, 1920)), "phoneScreenshots"
-    )["valid"]
+    assert preflight_image(write(tmp_path, "s.jpg", jpeg_bytes(1080, 1920)), "phoneScreenshots")[
+        "valid"
+    ]
 
 
 def test_a_jpeg_icon_is_rejected_on_format(tmp_path):
@@ -181,14 +183,16 @@ def test_a_screenshot_above_the_maximum_side_is_rejected(tmp_path):
 
 
 def test_a_screenshot_past_two_to_one_is_rejected(tmp_path):
-    result = preflight_image(write(tmp_path, "s.png", png_bytes(400, 1200, RGB)), "phoneScreenshots")
+    result = preflight_image(
+        write(tmp_path, "s.png", png_bytes(400, 1200, RGB)), "phoneScreenshots"
+    )
     assert any("Aspect ratio is 3.00:1" in e for e in result["errors"])
 
 
 def test_exactly_two_to_one_is_accepted(tmp_path):
-    assert preflight_image(
-        write(tmp_path, "s.png", png_bytes(500, 1000, RGB)), "phoneScreenshots"
-    )["valid"]
+    assert preflight_image(write(tmp_path, "s.png", png_bytes(500, 1000, RGB)), "phoneScreenshots")[
+        "valid"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -221,7 +225,9 @@ def test_every_broken_rule_is_reported_at_once(tmp_path):
 
 
 def test_the_report_carries_what_was_detected_and_the_spec(tmp_path):
-    result = preflight_image(write(tmp_path, "s.png", png_bytes(1080, 1920, RGB)), "phoneScreenshots")
+    result = preflight_image(
+        write(tmp_path, "s.png", png_bytes(1080, 1920, RGB)), "phoneScreenshots"
+    )
     assert result["detected"]["width"] == 1080
     assert result["detected"]["has_alpha"] is False
     assert result["spec"]["alpha"] == "forbidden"
@@ -327,9 +333,7 @@ def test_preflight_tools_are_reads_and_work_in_read_only_mode(tmp_path):
     path = write(tmp_path, "s.png", png_bytes(1080, 1920, RGB))
     server.set_read_only(True)
     try:
-        assert server.preflight_store_image(image_path=path, image_type="phoneScreenshots")[
-            "valid"
-        ]
+        assert server.preflight_store_image(image_path=path, image_type="phoneScreenshots")["valid"]
     finally:
         server.set_read_only(False)
 

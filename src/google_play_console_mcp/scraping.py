@@ -346,9 +346,7 @@ class ScrapingMixin:
                 remedy=f"Use one of: {', '.join(PRICE_FILTERS)}.",
             )
         results = self._scrape(
-            lambda c: c.search(
-                term=term, num=num, price=price, lang=language, country=country
-            ),
+            lambda c: c.search(term=term, num=num, price=price, lang=language, country=country),
             what=f"search the store for {term!r}",
         )
         return [_to_app(item) for item in results or []]

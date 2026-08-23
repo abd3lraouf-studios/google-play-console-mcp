@@ -91,9 +91,10 @@ def test_result_model_defaults():
     assert EditValidationResult(success=True, package_name=PKG, message="m").error is None
     assert CountryAvailability(package_name=PKG, track="production").countries == []
     assert ListingDeleteResult(success=True, package_name=PKG, message="m").deleted_all is False
-    assert ReviewReplyDeleteResult(
-        success=True, package_name=PKG, review_id="r", message="m"
-    ).method == "empty_reply"
+    assert (
+        ReviewReplyDeleteResult(success=True, package_name=PKG, review_id="r", message="m").method
+        == "empty_reply"
+    )
     assert RegionPriceConversion(package_name=PKG).converted_regions == {}
     assert AppDetailsUpdateResult(success=True, package_name=PKG, message="m").details is None
     assert (
@@ -351,9 +352,7 @@ def test_delete_all_listings_reports_failure():
 def test_add_externally_hosted_apk_parses_result():
     service = MagicMock()
     client = _client(service)
-    _edits(
-        service
-    ).apks.return_value.addexternallyhosted.return_value.execute.return_value = {
+    _edits(service).apks.return_value.addexternallyhosted.return_value.execute.return_value = {
         "externallyHostedApk": {
             "versionCode": 42,
             "externallyHostedUrl": "https://cdn.example.com/app.apk",
@@ -374,9 +373,7 @@ def test_add_externally_hosted_apk_parses_result():
 def test_add_externally_hosted_apk_handles_absent_file_size():
     service = MagicMock()
     client = _client(service)
-    _edits(
-        service
-    ).apks.return_value.addexternallyhosted.return_value.execute.return_value = {
+    _edits(service).apks.return_value.addexternallyhosted.return_value.execute.return_value = {
         "externallyHostedApk": {"versionCode": 1}
     }
     assert client.add_externally_hosted_apk(PKG, {}).file_size is None
@@ -594,9 +591,7 @@ def test_tool_update_app_details(mock_client: MagicMock):
     mock_client.update_app_details.return_value = AppDetailsUpdateResult(
         success=True, package_name=PKG, message="ok"
     )
-    result = confirm_via_gate(
-        server.update_app_details, package_name=PKG, contact_email="a@b.com"
-    )
+    result = confirm_via_gate(server.update_app_details, package_name=PKG, contact_email="a@b.com")
     assert result["success"] is True
     assert mock_client.update_app_details.call_args.kwargs["contact_email"] == "a@b.com"
 
@@ -663,12 +658,18 @@ def test_tool_expansion_file_reports_bad_type(mock_client: MagicMock):
     mock_client.set_expansion_file_reference.side_effect = ValueError(
         "expansion_file_type must be one of ['main', 'patch'], got 'obb'"
     )
-    assert "must be one of" in server.patch_expansion_file(
-        package_name=PKG, version_code=1, expansion_file_type="obb", references_version=1
-    )["error"]
-    assert "must be one of" in server.update_expansion_file(
-        package_name=PKG, version_code=1, expansion_file_type="obb", references_version=1
-    )["error"]
+    assert (
+        "must be one of"
+        in server.patch_expansion_file(
+            package_name=PKG, version_code=1, expansion_file_type="obb", references_version=1
+        )["error"]
+    )
+    assert (
+        "must be one of"
+        in server.update_expansion_file(
+            package_name=PKG, version_code=1, expansion_file_type="obb", references_version=1
+        )["error"]
+    )
 
 
 @pytest.mark.usefixtures("_writable")

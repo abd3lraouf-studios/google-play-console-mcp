@@ -194,7 +194,7 @@ def test_resolve_rejects_an_unknown_method():
 
 
 def test_resolve_rejects_a_path_naming_a_resource_rather_than_a_method():
-    """"edits.tracks" resolves to a resource object, not a request."""
+    """ "edits.tracks" resolves to a resource object, not a request."""
     service = MagicMock()
     resource = MagicMock(spec=[])
     service.edits.return_value.tracks.return_value = resource
@@ -327,9 +327,7 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 
 def test_tool_create_and_describe_edit(mock_client: MagicMock):
-    mock_client.open_edit.return_value = EditSession(
-        package_name=PKG, edit_id="e1", message="ok"
-    )
+    mock_client.open_edit.return_value = EditSession(package_name=PKG, edit_id="e1", message="ok")
     mock_client.describe_edit.return_value = EditDescription(
         package_name=PKG, edit_id="e1", listing_languages=["en-US"]
     )

@@ -20,7 +20,7 @@ lusky3/play-store-mcp
   MIT License  ->  LICENSES/lusky3-play-store-mcp-MIT.txt
 
   This project began as a fork of play-store-mcp at v0.5.1
-  (commit ebdd9fd0). The Android Publisher v3 client, the Pydantic model
+  (upstream commit ebdd9fd0). The Android Publisher v3 client, the Pydantic model
   layer, the MCP server scaffolding, the majority of the test suite and the
   CI configuration originate there and remain substantially that project's
   work.

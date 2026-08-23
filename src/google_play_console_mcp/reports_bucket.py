@@ -349,9 +349,7 @@ class ReportsBucketMixin:
             The parsed report. Amounts are in merchant currency and the currency
             is carried per row — never sum across currencies.
         """
-        objects = self._resolve_objects(
-            ReportKind.EARNINGS, month, package_name=None, dimension=""
-        )
+        objects = self._resolve_objects(ReportKind.EARNINGS, month, package_name=None, dimension="")
         if not objects:
             return Report(
                 rows=[],

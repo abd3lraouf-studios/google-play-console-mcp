@@ -97,9 +97,7 @@ _SCREENSHOT_SPEC_ARGS: dict[str, Any] = {
 }
 
 SPECS: dict[str, ImageSpec] = {
-    **{
-        name: ImageSpec(image_type=name, **_SCREENSHOT_SPEC_ARGS) for name in SCREENSHOT_TYPES
-    },
+    **{name: ImageSpec(image_type=name, **_SCREENSHOT_SPEC_ARGS) for name in SCREENSHOT_TYPES},
     "icon": ImageSpec(
         image_type="icon",
         formats=("png",),
@@ -283,8 +281,7 @@ def _check_dimensions(info: ImageInfo, spec: ImageSpec) -> list[str]:
         )
     if spec.min_side and min(info.width, info.height) < spec.min_side:
         errors.append(
-            f"Shortest side is {min(info.width, info.height)}px; the minimum is "
-            f"{spec.min_side}px."
+            f"Shortest side is {min(info.width, info.height)}px; the minimum is {spec.min_side}px."
         )
     if spec.max_side and max(info.width, info.height) > spec.max_side:
         errors.append(

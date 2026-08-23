@@ -68,3 +68,19 @@ contains. Failing the build is the only way to be sure it never happens.
 `pyproject.toml` holds the version. `0.x` while the planes are still settling;
 the first release that has run against a real Play Console account across every
 plane earns `1.0.0`.
+
+## Re-establishing the upstream link
+
+Git history was squashed when the project was renamed and relicensed, which
+removed the `upstream` remote. The fork point is recorded, so merging upstream
+fixes is still possible:
+
+```bash
+git remote add upstream https://github.com/lusky3/play-store-mcp
+git fetch upstream
+# fork point: play-store-mcp v0.5.1, commit ebdd9fd0
+git diff ebdd9fd0..upstream/stable -- src/play_store_mcp/
+```
+
+The package was renamed `play_store_mcp` -> `google_play_console_mcp`, so a
+straight merge will not apply. Read the upstream diff and port deliberately.

@@ -35,7 +35,9 @@ def _no_backoff_sleep() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_guard_state(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+def _isolate_guard_state(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> Generator[None, None, None]:
     """Point the write-safety guard at a throwaway state directory.
 
     The guard persists an HMAC key, a replay-nonce ledger and an append-only

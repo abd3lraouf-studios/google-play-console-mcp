@@ -308,8 +308,7 @@ class EditsMixin:
             raise ValidationError(
                 f"{method_path!r} names a resource, not a method.",
                 remedy=(
-                    "Append the operation, e.g. 'edits.tracks.list' rather than "
-                    "'edits.tracks'."
+                    "Append the operation, e.g. 'edits.tracks.list' rather than 'edits.tracks'."
                 ),
             )
         return (lambda: self._execute(request)), http_method

@@ -174,7 +174,7 @@ def test_find_column_exact_match():
 
 
 def test_find_column_survives_a_google_rename():
-    """"Daily Device Installs" -> "Daily Device Installs (new)" must still resolve."""
+    """ "Daily Device Installs" -> "Daily Device Installs (new)" must still resolve."""
     row = {"daily_device_installs_new": "1"}
     assert find_column(row, ["Daily Device Installs"]) == "daily_device_installs_new"
 
@@ -186,7 +186,7 @@ def test_find_column_never_matches_on_substrings():
 
 
 def test_find_column_requires_exact_match_for_single_token_candidates():
-    """"Device" is too ambiguous to fuzzy-match against a wider header."""
+    """ "Device" is too ambiguous to fuzzy-match against a wider header."""
     row = {"device_model_name": "Pixel"}
     assert find_column(row, ["Device"], required=False) is None
 
@@ -791,9 +791,7 @@ def test_any_stats_kind_can_be_parsed_by_the_shared_helper():
 
 
 def test_report_object_prefix_without_a_month_for_a_per_app_kind():
-    assert (
-        report_object_prefix("installs", package_name=PKG) == f"stats/installs/installs_{PKG}_"
-    )
+    assert report_object_prefix("installs", package_name=PKG) == f"stats/installs/installs_{PKG}_"
 
 
 def test_parse_skips_a_metric_cell_that_is_not_numeric():
