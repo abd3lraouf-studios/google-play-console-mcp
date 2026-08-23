@@ -21,9 +21,10 @@ add a pending publisher:
 "Pending" is correct while the project does not yet exist on PyPI; it becomes a
 normal trusted publisher on the first successful upload.
 
-The `pypi` GitHub environment must exist on the repository, and it carries a
-required reviewer — a tag push is enough to reach PyPI otherwise, and a PyPI
-version number can never be reused.
+The `pypi` GitHub environment must exist on the repository. It has no required
+reviewer: pushing a tag publishes, with no approval step in between. That is
+deliberate — the gate is the automated one below, which runs on every release
+and cannot be clicked through by mistake.
 
 ### There is deliberately no TestPyPI rehearsal
 
@@ -51,8 +52,9 @@ git push origin main
 git push origin v0.7.0
 ```
 
-The `pypi` environment requires an approval, so the run pauses before uploading
-and waits for a human. Approve it from the run page.
+Pushing the tag publishes. There is no approval prompt, so make sure the version
+in `pyproject.toml` and the tag agree before pushing — though the workflow
+checks that too, and fails the release if they do not.
 
 The tag must match the packaged version. The workflow reads the built
 distribution's metadata and fails the release if `v0.7.0` and the version in

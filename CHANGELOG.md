@@ -30,9 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than no step. What it was protecting against is covered directly by the
   install check above.
 
-- The `pypi` deployment environment now requires a reviewer, so a tag push
-  pauses for human approval instead of publishing straight through.
-
 ## [0.4.0] - 2026-08-24
 
 ### Added
