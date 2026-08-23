@@ -1,0 +1,202 @@
+name: Release
+
+# Publishes to PyPI via Trusted Publishing (OIDC). No API token exists anywhere
+# in this repository, so there is none to leak: PyPI verifies the workflow's
+# signed identity claim instead. Setup is one form on pypi.org — see
+# docs/releasing.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Type check
+        run: uv run mypy src/
+
+      # The live-API and subprocess tests need real credentials and a PATH the
+      # runner does not have. Everything else must pass, at full coverage.
+      - name: Test
+        run: >-
+          uv run pytest -q
+          --ignore=tests/test_live_api.py
+          --ignore=tests/test_integration_credentials.py
+          --cov=google_play_console_mcp --cov-report=term
+          --cov-fail-under=100
+
+      - name: Tag must match the packaged version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(uv run python -c "import importlib.metadata as m; print(m.version('google-play-console-mcp'))")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG does not match packaged version $PKG"
+            exit 1
+          fi
+          echo "tag and package agree on $PKG"
+
+  build:
+    name: Build distributions
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      # A wheel that ships without its LICENSE breaches Apache-2.0 section 4(a).
+      # Fail the release here rather than discover it after publishing.
+      - name: Wheel carries the licence file
+        run: |
+          uv run python - <<'PY'
+          import pathlib, sys, zipfile
+          wheel = next(pathlib.Path("dist").glob("*.whl"))
+          names = zipfile.ZipFile(wheel).namelist()
+          if not any(n.endswith("licenses/LICENSE") for n in names):
+              print("::error::wheel is missing: LICENSE")
+              print("\n".join(n for n in names if "dist-info" in n))
+              sys.exit(1)
+          print(f"{wheel.name} carries LICENSE")
+          PY
+
+      # Pin twine to what the publish action bundles (7.0.0 as of v1.14.2).
+      # A newer twine accepts metadata versions the publisher's own tooling
+      # rejects, so an unpinned check here passes and the upload then fails.
+      - name: Check metadata renders on PyPI
+        run: uvx --from "twine==7.0.0" twine check --strict dist/*
+
+      - name: Metadata version is one PyPI accepts
+        run: |
+          uv run python - <<'PY'
+          import email, glob, sys, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          z = zipfile.ZipFile(wheel)
+          name = next(n for n in z.namelist() if n.endswith("METADATA"))
+          version = email.message_from_bytes(z.read(name))["Metadata-Version"]
+          allowed = {"2.1", "2.2", "2.3", "2.4", "2.5"}
+          if version not in allowed:
+              print(f"::error::Metadata-Version {version} is not accepted by the "
+                    f"PyPI upload path (expected one of {sorted(allowed)})")
+              sys.exit(1)
+          print(f"Metadata-Version {version} is fine")
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/google-play-console-mcp
+    permissions:
+      id-token: write # the OIDC claim PyPI verifies; nothing else is needed
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      # Pin by commit SHA. v1.14.2's annotated-tag object has no ghcr image,
+      # so pinning the tag object's own SHA makes the Docker pull fail with
+      # "manifest unknown".
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/google-play-console-mcp
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  github-release:
+    name: Attach artifacts to the GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

@@ -1,0 +1,223 @@
+"""Pytest configuration and fixtures."""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock, patch
+
+import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+import pytest
+
+from google_play_console_mcp.client import PlayStoreClient
+
+# Suppress structlog's Rich-rendered tracebacks (fastmcp pulls in `rich`) on the
+# ~130 client error/warning log sites the error-path tests hit — a ~16x suite
+# slowdown. Two paths configure structlog: filter here at CRITICAL for tests that
+# import only the client (structlog's default config is unfiltered + Rich), and
+# set the env var so the server module — when a test imports it — also configures
+# at CRITICAL rather than INFO. Both drop WARNING/ERROR before any renderer runs.
+# Overridable by exporting GOOGLE_PLAY_MCP_LOG_LEVEL.
+os.environ.setdefault("GOOGLE_PLAY_MCP_LOG_LEVEL", "CRITICAL")
+structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL))
+
+
+@pytest.fixture(autouse=True)
+def _no_backoff_sleep() -> Generator[None, None, None]:
+    """Neutralize retry backoff sleeps so retry paths run instantly in tests."""
+    with patch("google_play_console_mcp.client.time.sleep"):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_guard_state(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> Generator[None, None, None]:
+    """Point the write-safety guard at a throwaway state directory.
+
+    The guard persists an HMAC key, a replay-nonce ledger and an append-only
+    audit log. Without this every test run would write into the developer's real
+    ~/.google-play-mcp, and the nonce ledger would make a replayed token in one test
+    depend on whether another test ran first.
+    """
+    from google_play_console_mcp import guards
+
+    monkeypatch.setenv("GOOGLE_PLAY_MCP_STATE_DIR", str(tmp_path / "guard-state"))
+    guards.reset_state_cache()
+    guards.clear_warnings()
+    yield
+    guards.reset_state_cache()
+    guards.clear_warnings()
+
+
+def confirm_via_gate(tool: Any, /, **kwargs: Any) -> dict[str, Any]:
+    """Drive a guarded tool through preview -> approval -> execution.
+
+    Mirrors what a well-behaved caller does: preview, read the block, then call
+    again with the token it issued. Asserts the first leg really did withhold
+    execution, so a tool that silently stopped being gated fails loudly here
+    instead of passing quietly.
+    """
+    import re
+
+    preview = tool(**kwargs, confirm=False)
+    assert preview.get("confirmation_required") is True, (
+        f"{getattr(tool, '__name__', tool)} returned no preview — is it still gated?"
+    )
+    match = re.search(r'confirmation_token="([^"]+)"', preview["preview"])
+    assert match, "preview did not carry a confirmation_token"
+    return tool(**kwargs, confirm=True, confirmation_token=match.group(1))
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_state() -> Generator[None, None, None]:
+    """Restore the module-level shared state after each test to avoid order dependence."""
+    from google_play_console_mcp import server
+
+    saved = dict(server._shared_state)
+    yield
+    server._shared_state.clear()
+    server._shared_state.update(saved)
+
+
+@pytest.fixture
+def _mock_credentials() -> Generator[MagicMock, None, None]:
+    """Mock Google credentials."""
+    with patch(
+        "google_play_console_mcp.credentials.service_account.Credentials.from_service_account_file"
+    ) as mock:
+        mock.return_value = MagicMock()
+        yield mock
+
+
+@pytest.fixture
+def _mock_service() -> Generator[MagicMock, None, None]:
+    """Mock the Google API service."""
+    with patch("google_play_console_mcp.client.build") as mock_build:
+        mock_service = MagicMock()
+        mock_build.return_value = mock_service
+        yield mock_service
+
+
+@pytest.fixture
+def client(
+    _mock_credentials: MagicMock,
+    _mock_service: MagicMock,
+    tmp_path: Any,
+) -> PlayStoreClient:
+    """Create a PlayStoreClient with mocked dependencies."""
+    # Create a fake credentials file
+    creds_file = tmp_path / "service-account.json"
+    creds_file.write_text('{"type": "service_account"}')
+
+    return PlayStoreClient(credentials_path=str(creds_file))
+
+
+@pytest.fixture
+def sample_track_response() -> dict[str, Any]:
+    """Sample response from tracks().list()."""
+    return {
+        "tracks": [
+            {
+                "track": "production",
+                "releases": [
+                    {
+                        "status": "completed",
+                        "versionCodes": ["100"],
+                        "name": "1.0.0",
+                        "releaseNotes": [{"language": "en-US", "text": "Initial release"}],
+                    }
+                ],
+            },
+            {
+                "track": "beta",
+                "releases": [
+                    {
+                        "status": "inProgress",
+                        "versionCodes": ["101"],
+                        "name": "1.1.0-beta",
+                        "userFraction": 0.5,
+                        "releaseNotes": [{"language": "en-US", "text": "Beta features"}],
+                    }
+                ],
+            },
+        ]
+    }
+
+
+@pytest.fixture
+def sample_reviews_response() -> dict[str, Any]:
+    """Sample response from reviews().list()."""
+    return {
+        "reviews": [
+            {
+                "reviewId": "review-123",
+                "authorName": "Test User",
+                "comments": [
+                    {
+                        "userComment": {
+                            "starRating": 5,
+                            "text": "Great app!",
+                            "reviewerLanguage": "en",
+                            "device": "Pixel 6",
+                            "androidOsVersion": "13",
+                            "appVersionCode": 100,
+                            "appVersionName": "1.0.0",
+                            "lastModified": {"seconds": "1700000000", "nanos": 0},
+                        }
+                    }
+                ],
+            },
+            {
+                "reviewId": "review-456",
+                "authorName": "Another User",
+                "comments": [
+                    {
+                        "userComment": {
+                            "starRating": 3,
+                            "text": "Needs improvement",
+                            "reviewerLanguage": "en",
+                            "lastModified": {"seconds": "1700000100", "nanos": 0},
+                        }
+                    },
+                    {
+                        "developerComment": {
+                            "text": "Thanks for the feedback!",
+                        }
+                    },
+                ],
+            },
+        ]
+    }
+
+
+@pytest.fixture
+def sample_subscriptions_response() -> dict[str, Any]:
+    """Sample response from monetization().subscriptions().list()."""
+    return {
+        "subscriptions": [
+            {
+                "productId": "premium_monthly",
+                "basePlans": [
+                    {
+                        "basePlanId": "monthly",
+                        "state": "ACTIVE",
+                    }
+                ],
+            },
+            {
+                "productId": "premium_yearly",
+                "basePlans": [
+                    {
+                        "basePlanId": "yearly",
+                        "state": "ACTIVE",
+                    }
+                ],
+            },
+        ]
+    }
