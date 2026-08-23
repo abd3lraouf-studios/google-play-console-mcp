@@ -1,6 +1,6 @@
 # Google Play Console MCP
 
-**An MCP server for Google Play Console — 169 tools across publishing, Android
+**An MCP server for Google Play Console — 170 tools across publishing, Android
 vitals, revenue, ASO and store assets, with a confirmation gate on every
 destructive write.**
 
@@ -39,7 +39,7 @@ whole surface, and the only one with a real test suite.
 
 |  | this | typical |
 |---|---:|---:|
-| Tools | **169** | 3–150 |
+| Tools | **170** | 3–150 |
 | Google APIs covered | **3** + scraping + preflight | 1 |
 | Tests | **1,198** | 0 |
 | Branch coverage | **100%** | none |
@@ -238,7 +238,7 @@ See [Write safety](docs/write-safety.md).
 
 ## Tools
 
-169 tools. Full reference in [docs/](https://github.com/abd3lraouf-studios/google-play-console-mcp/tree/main/docs).
+170 tools. Full reference in [docs/](https://github.com/abd3lraouf-studios/google-play-console-mcp/tree/main/docs).
 
 | Area | Examples |
 |---|---|

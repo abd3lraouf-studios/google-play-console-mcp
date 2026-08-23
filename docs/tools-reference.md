@@ -183,7 +183,8 @@ Complete reference for all MCP tools provided by the Google Play Console MCP ser
 
 | Tool | Description |
 |---|---|
-| `set_data_safety` | Write an app's data safety labels declaration (write) |
+| [`set_data_safety`](tools/data-safety.md#set_data_safety) | Write an app's data safety labels declaration (write) |
+| [`preflight_data_safety_csv`](tools/data-safety.md#preflight_data_safety_csv) | Check a Data Safety CSV export before declaring it |
 | [`list_app_recoveries`](tools/subscriptions.md#list_app_recoveries) | List app recovery actions for an app |
 | `create_app_recovery` | Create a draft app recovery action (write) |
 | `deploy_app_recovery` | Deploy an app recovery action to users (write) |

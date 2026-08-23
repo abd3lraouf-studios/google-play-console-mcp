@@ -11,6 +11,7 @@ from googleapiclient.errors import HttpError
 import google_play_console_mcp.server as server
 from google_play_console_mcp.client import PlayStoreClient, PlayStoreClientError
 from google_play_console_mcp.models import ProductPurchase, ProductPurchaseActionResult
+from tests.api_double import verified
 
 # ---------------------------------------------------------------------------
 # Models
@@ -79,7 +80,7 @@ def _client_with_products(products_mock: MagicMock) -> PlayStoreClient:
     client = PlayStoreClient(credentials_json={"type": "service_account"})
     service = MagicMock()
     service.purchases.return_value.products.return_value = products_mock
-    client._service = service
+    client._service = verified(service)
     return client
 
 

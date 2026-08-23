@@ -1,8 +1,8 @@
 # Write safety
 
 Google Play Console MCP can ship a release to production, delete every localized store
-listing, and refund real money. Fifteen tools are therefore behind a two-step
-confirmation gate, and every attempt — previewed, confirmed, rejected, executed
+listing, and refund real money. The tools listed below are therefore behind a
+two-step confirmation gate, and every attempt — previewed, confirmed, rejected, executed
 or failed — is written to an append-only audit log.
 
 ## Why a gate and not just read-only
@@ -104,12 +104,15 @@ same: preview again, and confirm the new preview.
 | `update_rollout` | changes who receives an update; widening is irreversible |
 | `delete_listing`, `delete_all_listings` | destroys store listing text, no API undo |
 | `delete_all_images` | destroys store screenshots |
-| `set_data_safety` | a legal declaration; an inaccurate one can get the app removed |
+| `set_data_safety` | a legal declaration; an inaccurate one can get the app removed, and there is no API to read back what it replaced |
 | `refund_order`, `revoke_subscription_purchase` | moves real money, not reversible |
 | `delete_user` | removes a person's Play Console access |
 | `deploy_app_recovery` | pushes a recovery action to installed devices |
 | `update_app_details` | changes public contact information |
 | `delete_review_reply` | changes a public reply |
+| `clone_listing_to_locale` | overwrites an existing translation |
+| `commit_edit` | publishes everything staged in the edit |
+| `android_publisher_invoke` | a raw write to any Publisher endpoint |
 
 ### `halt_release` is deliberately NOT gated
 

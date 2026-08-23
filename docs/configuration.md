@@ -84,6 +84,7 @@ docker run -p 8000:8000 \
 | `GOOGLE_PLAY_MCP_DISABLE_DNS_REBINDING` | Disable DNS rebinding protection (for cloud/reverse-proxy deployments) | No | — |
 | `GOOGLE_PLAY_MCP_ADMIN_TOKEN` | Require `Authorization: Bearer <token>` on the `/credentials` endpoint (needed behind a reverse proxy, where the localhost check is insufficient) | No | — |
 | `GOOGLE_PLAY_MCP_READ_ONLY` | Disable all write operations | No | — |
+| `GOOGLE_PLAY_MCP_BODY_VALIDATION` | How strictly request bodies are checked against the API description: `strict`, `on`, `warn`, `off` | No | `on` |
 | `GOOGLE_PLAY_MCP_DOWNLOAD_DIR` | Directory that APK/AAB downloads are confined to (guards against path traversal / arbitrary-file overwrite). Downloads are **always** confined; a destination outside this directory is rejected. **Recommended** for network/hosted deployments (`sse`/`streamable-http`) — the server warns if it is unset and falls back to the working directory, which may be read-only on some hosts (e.g. set it to `/tmp/play-store-downloads` on Render). | No (defaults to cwd) | cwd |
 | `CODE_MODE` | Enable the experimental code-mode transform (opt-in; requires the `code-mode` extra) | No | off |
 
@@ -166,6 +167,34 @@ list on every request. This cuts the per-request tool-list token overhead.
     Read-only enforcement still applies inside the sandbox, so if the deployment
     does not need writes, run code mode with `--read-only` /
     `GOOGLE_PLAY_MCP_READ_ONLY=1` to block those operations.
+
+## Request-body validation
+
+Thirty-eight tools take a raw API body, so a misspelled field used to travel to
+Google and come back as a 400 that did not say which field was wrong. Bodies are
+now checked first, against the same Android Publisher description
+`google-api-python-client` builds the service from.
+
+Only what cannot drift is refused: an unknown field name (with a "did you mean")
+and a wrong JSON type. Enum values, fields documented as required, and read-only
+or deprecated fields are warnings — enums are the most-churned part of the
+description, and Google returns a clear error for a bad one anyway.
+
+The bundled description lags the live API by a few weeks, which is a lag the
+client already has. If Google adds a field before that catches up, a valid body
+could be refused. Two ways out, in order of preference:
+
+```bash
+uv lock --upgrade-package google-api-python-client   # teach it the new field
+export GOOGLE_PLAY_MCP_BODY_VALIDATION=warn          # or stop it blocking
+```
+
+| Value | Effect |
+|---|---|
+| `strict` | Enum and required-field warnings become refusals too |
+| `on` | Default: unknown fields and wrong types are refused |
+| `warn` | Nothing is refused; problems are logged |
+| `off` | No checking at all |
 
 Enabling it requires two things:
 

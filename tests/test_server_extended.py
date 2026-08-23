@@ -77,7 +77,7 @@ def test_server_uses_fastmcp_and_registers_all_tools() -> None:
 
     assert isinstance(server.mcp, fastmcp.FastMCP)
     tools = asyncio.run(server.mcp.list_tools())  # Sequence[Tool]
-    assert len(tools) == 169
+    assert len(tools) == 170
 
     names = {tool.name for tool in tools}
     assert {

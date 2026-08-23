@@ -19,6 +19,7 @@ from google_play_console_mcp.models import (
     OneTimeProductActionResult,
     OneTimeProductOffer,
 )
+from tests.api_double import verified
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -36,7 +37,7 @@ def _make_http_error(reason: str = "boom") -> HttpError:
 
 def _client(service: MagicMock) -> PlayStoreClient:
     client = PlayStoreClient(credentials_json={"type": "service_account"})
-    client._service = service
+    client._service = verified(service)
     return client
 
 

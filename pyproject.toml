@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "google-play-console-mcp"
-version = "0.3.1"
-description = "MCP server for Google Play Console: 169 tools for releases, Android vitals, earnings, ASO and store assets, with a confirmation gate on destructive writes"
+version = "0.4.0"
+description = "MCP server for Google Play Console: 170 tools for releases, Android vitals, earnings, ASO and store assets, with a confirmation gate on destructive writes"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -71,6 +71,12 @@ dependencies = [
     # transitive dependency of fastmcp, but declared directly because
     # google_play_console_mcp.keychain imports it in its own right.
     "keyring>=25.7.0",
+    # Same reasoning: server.py imports both directly for the HTTP transport,
+    # the /health and /credentials routes and the TrustedHost middleware. They
+    # arrive transitively via fastmcp today, so nothing breaks until fastmcp
+    # changes what it pins — at which point this server stops importing.
+    "starlette>=0.42.0",
+    "uvicorn>=0.34.0",
 ]
 
 [project.optional-dependencies]
@@ -81,6 +87,10 @@ dev = [
     "ruff>=0.16.4",
     "mypy>=2.3.1",
     "fastmcp[code-mode]==4.0.0b3",
+    # Property-based tests for the Data Safety CSV parser. Example-based tests
+    # cover the formats we thought of; this covers the ones we did not, and it
+    # is how the unhandled _csv.Error on an oversized field was found.
+    "hypothesis>=6.165.0",
 ]
 code-mode = [
     "fastmcp[code-mode]==4.0.0b3",
@@ -219,7 +229,15 @@ disable_error_code = ["no-untyped-call"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-v --tb=short"
+# A list, not a string: a quoted -m expression inside a single addopts string
+# survives pytest's own shlex parsing but breaks tools that re-split it
+# (mutmut, for one, hands pytest a literal "'not" and fails to start).
+addopts = ["-v", "--tb=short", "-m", "not network"]
+markers = [
+    # Hits a live Google discovery endpoint. Deselected by default so the suite
+    # runs offline and in CI; run it with `-m network` to check for API drift.
+    "network: reaches a live Google endpoint",
+]
 filterwarnings = [
     "ignore:cannot collect test class:pytest.PytestCollectionWarning",
     "ignore::DeprecationWarning",

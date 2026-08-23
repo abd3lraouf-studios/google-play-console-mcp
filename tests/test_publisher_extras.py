@@ -26,6 +26,7 @@ from google_play_console_mcp.publisher_extras import (
     RELEASE_STATUSES,
     _parse_release,
 )
+from tests.api_double import verified
 from tests.conftest import confirm_via_gate
 
 PKG = "com.example.app"
@@ -47,7 +48,7 @@ def _make_http_error(reason: str = "boom", status: int = 400) -> HttpError:
 
 def _client(service: MagicMock) -> PlayStoreClient:
     client = PlayStoreClient(credentials_json={"type": "service_account"})
-    client._service = service
+    client._service = verified(service)
     service.edits.return_value.insert.return_value.execute.return_value = {"id": "edit-1"}
     return client
 

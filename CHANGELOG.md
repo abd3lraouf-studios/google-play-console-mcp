@@ -11,6 +11,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-24
+
+### Added
+
+- **Data Safety CSV support.** `set_data_safety` takes a `csv_path` and reads,
+  checks and sends the file itself; `safety_labels` still works unchanged. New
+  read-only `preflight_data_safety_csv` reports everything wrong with an export
+  before it is declared, and a `declare_data_safety` prompt walks the
+  export → preflight → declare path. The declaration has no read API, so an
+  exported CSV is the only rollback that can exist — the prompt and the preview
+  both say so.
+
+  Structural faults block: wrong headers, a `Response value` that is not a
+  boolean or blank, a repeated response, a single-choice question with two
+  answers, UTF-16. Booleans are accepted in either case — Google's Help Center
+  says `TRUE`/`FALSE`, but five of six exports sampled from published apps
+  (2022-2026) write lowercase. Conditional faults only warn — most of a real export is contingent on
+  answers elsewhere in it, and an unrecognised `PSL_*` question ID means "look
+  at this", never "stop". See `docs/tools/data-safety.md`.
+
+- **Contract tests against the real API description.** Every `service.…` call in
+  the source is checked against the Android Publisher discovery document
+  `google-api-python-client` ships and `client.py` already builds from, along
+  with the `METRIC_SETS` accessor paths — which reach the API through `getattr`,
+  where neither static analysis nor a mock could see them — and
+  `INVOKABLE_ROOTS`. A network-marked drift test compares the bundled document
+  against the live one; it is deselected by default.
+
+### Changed
+
+- **Request bodies are checked before they are sent.** Thirty-eight tools take a
+  raw API body; a misspelled field used to reach Google and come back as a 400
+  that did not name it. Unknown fields (with a "did you mean") and wrong JSON
+  types are now refused locally; enum values, documented-required fields and
+  read-only fields warn. `GOOGLE_PLAY_MCP_BODY_VALIDATION=warn` turns the layer
+  off if Google adds a field before the pinned client learns about it. See
+  `docs/configuration.md`.
+
+- The test suite's service double now resolves every attribute against the
+  discovery document before delegating to the mock, so a typo'd method or
+  parameter fails instead of passing silently. Existing assertions are
+  unchanged. This immediately caught one under-specified test, which called
+  `edits.tracks.list` without the required `editId`.
+
+- Property-based tests for the CSV parser, via `hypothesis` (new dev
+  dependency). They assert the invariants the example tests cannot: that the
+  uploaded text is always the input verbatim, that a report is internally
+  consistent, that warnings never decide validity, and that an unreadable file
+  always surfaces as a `ValidationError` with a remedy rather than a crash.
+
+### Fixed
+
+- **Data Safety CSVs are accepted with lowercase booleans.** Google's Help
+  Center says to enter `TRUE`/`FALSE`, and the first implementation enforced
+  that. Real exports disagree: of six sampled from published apps between 2022
+  and 2026, five write lowercase `true`/`false`. The strict reading rejected
+  five of those six. Both cases are now accepted; only a value that is not a
+  boolean at all is an error.
+
+- An oversized CSV field no longer escapes as a bare `_csv.Error`. An unclosed
+  quote swallows the rest of the file into one cell and trips csv's 128 KB
+  field limit; that now returns a `ValidationError` naming the likely cause.
+
+- The inline `safety_labels` path had no size ceiling — only `load_csv` checked
+  the file on disk. It is now bounded the same way.
+
+- `starlette` and `uvicorn` are declared directly. `server.py` imports both for
+  the HTTP transport, the `/health` and `/credentials` routes and the
+  TrustedHost middleware, but they arrived only transitively via `fastmcp`, so
+  a change to what fastmcp pins would have broken this server at import. Same
+  reasoning already applied to `pyjwt` and `keyring`. Found with `deptry`.
+
+- `pytest`'s `addopts` is a list rather than a string. A quoted `-m` expression
+  inside one string survives pytest's own parsing but breaks tools that re-split
+  it.
+
+- A long non-string argument is no longer rendered in full into the confirmation
+  block. `_call_value` only length-capped strings, so a multi-kilobyte CSV
+  arriving as a one-key dict was echoed in its entirety — and a preview nobody
+  reads to the end is not a safety mechanism. Such values are now replaced with
+  a digest the human can check the confirm call against.
+
+- Corrected the gated-tool count, which had drifted three different ways: the
+  docs said fifteen and listed fifteen, `gplay://config` said sixteen, the
+  README said eighteen. Eighteen is right. The resource now counts them instead
+  of asserting a number, and `docs/write-safety.md` lists all eighteen —
+  `android_publisher_invoke`, `clone_listing_to_locale` and `commit_edit` were
+  missing.
+
+- `set_data_safety` is documented in `docs/tools/data-safety.md` rather than
+  inside the subscriptions reference, and is linked from the tool index.
+
 ## [0.3.1] - 2026-08-23
 
 ### Changed
@@ -191,7 +283,8 @@ resources.
   unmodified. Pinned to the exact beta version (not an open range) since
   FastMCP 4 isn't GA yet; `stable` is unaffected (still capped `<4.0`).
 
-[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/abd3lraouf-studios/google-play-console-mcp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.4.0
 [0.3.1]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.3.0
 [0.2.1]: https://github.com/abd3lraouf-studios/google-play-console-mcp/releases/tag/v0.2.1

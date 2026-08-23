@@ -18,6 +18,7 @@ from google_play_console_mcp.models import (
     ListingUpdateResult,
     LocaleCoverage,
 )
+from tests.api_double import verified
 from tests.conftest import confirm_via_gate
 
 PKG = "com.example.app"
@@ -33,7 +34,7 @@ def _http_error(reason: str = "boom", status: int = 400) -> HttpError:
 
 def _client(service: MagicMock) -> PlayStoreClient:
     client = PlayStoreClient(credentials_json={"type": "service_account"})
-    client._service = service
+    client._service = verified(service)
     service.edits.return_value.insert.return_value.execute.return_value = {"id": "edit-1"}
     return client
 
@@ -159,7 +160,7 @@ def test_resolve_returns_a_callable_and_the_http_verb():
     request.execute.return_value = {"tracks": []}
 
     call, verb = _client(service).resolve_publisher_request(
-        "edits.tracks.list", {"packageName": PKG}
+        "edits.tracks.list", {"packageName": PKG, "editId": "edit-1"}
     )
     assert verb == "GET"
     assert call() == {"tracks": []}
@@ -199,7 +200,7 @@ def test_resolve_rejects_a_path_naming_a_resource_rather_than_a_method():
     resource = MagicMock(spec=[])
     service.edits.return_value.tracks.return_value = resource
     client = _client(MagicMock())
-    client._service = service
+    client._service = verified(service)
     with pytest.raises(ValidationError, match="names a resource, not a method") as exc:
         client.resolve_publisher_request("edits.tracks")
     assert "edits.tracks.list" in exc.value.remedy

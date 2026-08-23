@@ -298,6 +298,27 @@ def test_call_signature_echoes_arguments_and_protects_secrets():
     assert "confirm=True," in sig
 
 
+def test_call_signature_replaces_a_long_non_string_value():
+    # A multi-kilobyte CSV arrives as a one-key dict, so the isinstance(str)
+    # branch never sees it and repr() would render the whole file into the
+    # block a human is supposed to read.
+    payload = {"safetyLabels": "PSL_Q,R,TRUE,MULTIPLE_CHOICE,Label\n" * 400}
+    op = Operation(tool="t", target="x", params={}, call_args={"safety_labels": payload})
+
+    sig = op.call_signature()
+
+    assert "PSL_Q" not in sig
+    assert "the same dict you passed before" in sig
+    assert "sha256:" in sig
+    assert len(sig) < 400
+
+
+def test_call_signature_still_echoes_a_short_non_string_value():
+    op = Operation(tool="t", target="x", params={}, call_args={"releases": [{"status": "draft"}]})
+
+    assert "releases=[{'status': 'draft'}]" in op.call_signature()
+
+
 def test_call_signature_falls_back_to_params():
     assert "track='beta'" in _op(track="beta").call_signature()
 

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import base64
 import binascii
+import inspect
 import ipaddress
 import json
 import logging
@@ -28,8 +29,26 @@ from starlette.responses import JSONResponse
 from google_play_console_mcp.client import PlayStoreClient, PlayStoreClientError
 from google_play_console_mcp.credentials import USE_ADC_ENV
 from google_play_console_mcp.credentials_cli import run_cli as run_credentials_cli
+from google_play_console_mcp.data_safety import (
+    build_request as _build_data_safety_request,
+)
+from google_play_console_mcp.data_safety import (
+    declared as _data_safety_declared,
+)
+from google_play_console_mcp.data_safety import (
+    load_csv as _load_data_safety_csv,
+)
+from google_play_console_mcp.data_safety import (
+    parse_csv as _parse_data_safety_csv,
+)
+from google_play_console_mcp.data_safety import (
+    preflight_csv as _preflight_data_safety_csv,
+)
+from google_play_console_mcp.data_safety import (
+    validate as _validate_data_safety,
+)
 from google_play_console_mcp.edits import READ_ONLY_HTTP_METHODS
-from google_play_console_mcp.errors import PlayConsoleError
+from google_play_console_mcp.errors import PlayConsoleError, ValidationError
 from google_play_console_mcp.guards import (
     PRODUCTION_POLICY,
     UNTRUSTED_CONTENT_NOTE,
@@ -293,7 +312,7 @@ def _build_transforms() -> list[Any]:
     When CODE_MODE is enabled, wrap the tool surface in the experimental CodeMode
     transform (search/get_schema/execute meta-tools + sandboxed execution), which
     cuts per-request tool-list overhead. Default: no transforms — the classic
-    117-tool surface, unchanged.
+    tool surface, unchanged.
     """
     if not _code_mode_enabled():
         return []
@@ -3069,23 +3088,107 @@ def delete_grant(developer_id: str, email: str, package_name: str) -> dict[str, 
 # =============================================================================
 # Data Safety Tools
 # =============================================================================
+#
+# applications.dataSafety is write-only: no endpoint reads the current
+# declaration back. Everything below is shaped by that. The CSV can only come
+# from Play Console's own export, the write replaces the whole form, and the
+# file the caller started from is the only possible rollback.
+
+#: Enough labels to recognise the declaration, few enough to stay readable in a
+#: confirmation block. The full list is what preflight_data_safety_csv returns.
+_PREVIEW_DECLARED_LIMIT = 12
+#: Same reasoning for warnings. A real export can raise a hundred conditional
+#: ones, and a preview nobody reads to the end is not a safety mechanism.
+_PREVIEW_WARNING_LIMIT = 8
+
+
+def _read_data_safety_input(
+    csv_path: str | None, safety_labels: dict[str, Any] | None
+) -> tuple[Any, bool]:
+    """Parse whichever input was given; the flag says whether checks are binding.
+
+    An inline ``safety_labels`` is reported on but never refused. The validator
+    encodes an unpublished format that Google changes without notice, so there
+    has to be a way past it that does not require trusting this server's idea of
+    the format — and this one costs the caller a deliberate act, which a
+    ``skip_validation`` flag would not.
+    """
+    if csv_path is not None:
+        return _load_data_safety_csv(csv_path), True
+    labels = safety_labels or {}
+    text = labels.get("safetyLabels")
+    if not isinstance(text, str) or not text.strip():
+        raise ValidationError(
+            "safety_labels must be {'safetyLabels': '<contents of the Data Safety CSV>'}.",
+            remedy="Pass csv_path instead and let the file be read and checked for you.",
+        )
+    return _parse_data_safety_csv(text), False
+
+
+def _declared_summary(csv_file: Any) -> str:
+    """The YES answers, as the preview's multi-line change entry."""
+    declared = _data_safety_declared(csv_file)
+    if not declared:
+        return "nothing — this declares that the app collects and shares no user data"
+    shown = [d["label"] or d["question_id"] for d in declared[:_PREVIEW_DECLARED_LIMIT]]
+    remaining = len(declared) - len(shown)
+    if remaining > 0:
+        shown.append(f"… and {remaining} more (see preflight_data_safety_csv)")
+    return "\n".join(shown)
+
+
+def _data_safety_warnings(report: dict[str, Any], *, enforced: bool) -> list[str]:
+    warnings = [
+        "The Data Safety form is a declaration to users and to Google about what the app "
+        "collects and shares. An inaccurate one is a policy violation, and Play can remove "
+        "the app over it.",
+        "This replaces the whole declaration, not just the fields you changed.",
+        "There is no API to read the current declaration, so this preview cannot show what "
+        "it replaces.",
+    ]
+    if not enforced:
+        warnings.append(
+            "safety_labels was supplied inline, so structure was checked but NOT enforced."
+        )
+        warnings += [f"Structure check (not enforced): {e}" for e in report["errors"]]
+    extra = report["warnings"]
+    warnings += extra[:_PREVIEW_WARNING_LIMIT]
+    if len(extra) > _PREVIEW_WARNING_LIMIT:
+        warnings.append(
+            f"… and {len(extra) - _PREVIEW_WARNING_LIMIT} more warnings; "
+            f"preflight_data_safety_csv lists them all."
+        )
+    return warnings
 
 
 @mcp.tool()
 def set_data_safety(
     package_name: str,
-    safety_labels: dict[str, Any],
+    safety_labels: dict[str, Any] | None = None,
+    csv_path: str | None = None,
     confirm: bool = False,
     confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     """Write the data safety labels declaration of an app.
 
+    Supply EITHER csv_path (preferred) OR safety_labels, not both.
+
+    There is no API to read the current declaration back, so the CSV can only
+    come from Play Console > App content > Data safety > Export to CSV, and that
+    exported file is the only thing that could ever undo this write. Export one
+    before you start.
+
+    A csv_path is checked before anything is sent, and the file is read again on
+    the confirm leg — so the approval is bound to the answers, not to the path.
+
     Disabled in read-only mode. Two-step: preview, then confirm.
 
     Args:
         package_name: App package name
-        safety_labels: SafetyLabelsUpdateRequest resource body. Contains a
-            `safetyLabels` string with the contents of the Data Safety CSV
+        csv_path: Path to a CSV exported from Play Console
+        safety_labels: SafetyLabelsUpdateRequest body, i.e.
+            {"safetyLabels": "<contents of the Data Safety CSV>"}. Structure is
+            reported but not enforced on this path
         confirm: Set True only after the user approved the preview
         confirmation_token: The token from that preview; never invent one
 
@@ -3094,22 +3197,72 @@ def set_data_safety(
     """
     if blocked := _read_only_block("set_data_safety"):
         return blocked
+    if (csv_path is None) == (safety_labels is None):
+        return ValidationError(
+            "set_data_safety needs exactly one of csv_path or safety_labels.",
+            remedy=(
+                "Pass csv_path with a CSV exported from Play Console > App content > "
+                "Data safety > Export to CSV."
+            ),
+        ).to_dict()
+
+    try:
+        csv_file, enforced = _read_data_safety_input(csv_path, safety_labels)
+    except PlayConsoleError as exc:
+        return exc.to_dict()
+    report = _validate_data_safety(csv_file)
+    if enforced and not report["valid"]:
+        return {
+            "error": "validation_error",
+            "message": (
+                f"The Data Safety CSV has {len(report['errors'])} problem(s); nothing was sent."
+            ),
+            "remedy": (
+                "Fix the rows named below, or re-export the file. "
+                "preflight_data_safety_csv returns this same report."
+            ),
+            "report": report,
+        }
 
     op = Operation(
         tool="set_data_safety",
         target=target_for(package_name),
-        params={"safety_labels": safety_labels},
-        call_args={"package_name": package_name, "safety_labels": safety_labels},
+        params={
+            "source": "csv_path" if csv_path else "safety_labels",
+            "csv_sha256": csv_file.sha256,
+            "csv_bytes": csv_file.byte_length,
+            "rows": len(csv_file.rows),
+            "questions": len(csv_file.questions),
+            "answered_true": report["stats"]["answered_true"],
+        },
+        call_args=(
+            {"package_name": package_name, "csv_path": csv_path}
+            if csv_path
+            else {"package_name": package_name, "safety_labels": safety_labels}
+        ),
     )
     preview = Preview(
-        summary="Replace this app's Data Safety declaration.",
-        warnings=[
-            "The Data Safety form is a declaration to users and to Google about what the app "
-            "collects and shares. An inaccurate one is a policy violation, and Play can remove "
-            "the app over it.",
-            "This replaces the whole declaration, not just the fields you changed.",
+        summary=(
+            f"Replace the ENTIRE Data Safety declaration of {package_name} — "
+            f"{len(csv_file.questions)} questions, "
+            f"{report['stats']['answered_true']} answered YES."
+        ),
+        changes=[
+            Change("source", None, csv_path or "inline safety_labels"),
+            Change("csv sha256", None, csv_file.sha256[:16]),
+            Change(
+                "size",
+                None,
+                f"{csv_file.byte_length} bytes, {len(csv_file.rows)} rows",
+            ),
+            Change("declares YES to", None, _declared_summary(csv_file)),
         ],
-        reversal="Submit the previous declaration again.",
+        warnings=_data_safety_warnings(report, enforced=enforced),
+        reversal=(
+            "Submit the previous CSV again. There is no API to read this declaration, so "
+            "the only copy of what it currently says is a CSV exported from Play Console "
+            "before this write. Without one, this is not reversible."
+        ),
     )
     if early := _gate(op, preview, confirm=confirm, confirmation_token=confirmation_token):
         return early
@@ -3119,9 +3272,15 @@ def set_data_safety(
     with audit_execution(op):
         result = client.set_data_safety(
             package_name=package_name,
-            safety_labels=safety_labels,
+            safety_labels=_build_data_safety_request(csv_file),
         )
-    return result.model_dump()
+    return {
+        **result.model_dump(),
+        "csv_sha256": csv_file.sha256,
+        "rows_submitted": len(csv_file.rows),
+        "questions_submitted": len(csv_file.questions),
+        "validated": enforced,
+    }
 
 
 # =============================================================================
@@ -5195,7 +5354,7 @@ def check_aso_metadata(
 
 
 # =============================================================================
-# Store-image preflight
+# Local preflight
 # =============================================================================
 #
 # Google Play Console MCP does not generate screenshots. It checks that a rendered file
@@ -5206,6 +5365,39 @@ def check_aso_metadata(
 # NO alpha channel, while the icon MUST have one. Any exporter defaulting to
 # "PNG" produces RGBA, which is right for the icon and rejected for everything
 # else.
+
+
+@mcp.tool()
+def preflight_data_safety_csv(csv_path: str) -> dict[str, Any]:
+    """Check a Data Safety CSV export before declaring it.
+
+    Play has no API to read the current Data Safety declaration, and
+    set_data_safety replaces it wholesale, so this is the only point at which
+    the file can be inspected. Play's own rejection arrives after the upload and
+    does not name the row.
+
+    Structural faults are errors: wrong headers, a row that is not five fields,
+    a Response value that is not exactly TRUE/FALSE/blank (a lowercase "true" is
+    the signature of a spreadsheet re-save), a repeated response, or a
+    single-choice question with two answers.
+
+    Everything conditional is a warning. Google adds and renames question IDs
+    without publishing them, and most of a real export is conditional on
+    answers elsewhere in it, so an unrecognised ID or an unanswered group means
+    "look at this", never "stop".
+
+    Args:
+        csv_path: Path to a CSV exported from Play Console > App content >
+            Data safety > Export to CSV
+
+    Returns:
+        valid, errors, warnings, the detected encoding/size/digest, the
+        questions this file answers YES, and any unrecognised question IDs
+    """
+    try:
+        return _preflight_data_safety_csv(csv_path)
+    except PlayConsoleError as exc:
+        return exc.to_dict()
 
 
 @mcp.tool()
@@ -5659,6 +5851,24 @@ def vitals_metric_sets_resource() -> str:
     )
 
 
+def _gated_tool_count() -> int:
+    """How many tools are behind the confirmation gate, counted rather than typed.
+
+    Every hard-coded copy of this number in the repo had drifted — the docs said
+    fifteen, this resource said sixteen, the README said eighteen. A gated tool
+    is exactly one that accepts a ``confirmation_token``, so ask the module.
+    """
+    return sum(
+        1
+        for name, obj in globals().items()
+        if not name.startswith("_")
+        and inspect.isfunction(obj)
+        # Defined here, not re-exported from guards.
+        and obj.__module__ == __name__
+        and "confirmation_token" in inspect.signature(obj).parameters
+    )
+
+
 @mcp.resource("gplay://config")
 def config_resource() -> str:
     """What this server has configured, without revealing any of it.
@@ -5702,7 +5912,7 @@ def config_resource() -> str:
                 "image_preflight": {"configured": True, "needs": "nothing"},
             },
             "write_safety": {
-                "gate": "two-step confirmation on 16 high-blast-radius tools",
+                "gate": (f"two-step confirmation on {_gated_tool_count()} high-blast-radius tools"),
                 "audit_log": str(audit_log_path()),
                 "max_initial_production_rollout": PRODUCTION_POLICY.max_initial_fraction,
             },
@@ -5753,6 +5963,48 @@ Then, in this order:
 
 Ask before deleting anything. `delete_all_images` removes every image of a type
 for a locale in one commit and the API has no undo.
+"""
+
+
+@mcp.prompt()
+def declare_data_safety(package_name: str) -> str:
+    """Walk the export -> preflight -> declare path for the Data Safety form.
+
+    The step everyone skips is the first one. This declaration has no read API,
+    so the export is not just the input — it is the only rollback that will ever
+    exist, and it has to be taken before anything is written.
+    """
+    return f"""Update the Data Safety declaration for {package_name}.
+
+Read this before starting: `set_data_safety` REPLACES the entire declaration,
+and Play offers no API to read the current one back. The exported CSV is
+therefore the only copy of what the form says today, and the only way to undo
+this. If the user cannot produce one, say so and stop.
+
+1. Ask the user to export the current form: Play Console > App content >
+   Data safety > Export to CSV. Tell them to keep that file — it is the rollback.
+
+2. Edit the CSV, or have the user edit it. Do not open it in a spreadsheet if it
+   can be avoided: a round trip through Excel or Sheets rewrites TRUE as True and
+   can re-encode the file as UTF-16, both of which preflight will reject.
+
+3. `preflight_data_safety_csv(csv_path=...)`
+   - `errors` must be empty. Fix them in the CSV; do not work around them.
+   - `warnings` are for the user to judge, not for you to act on. An
+     unrecognised question ID usually means Google added a question after this
+     server's snapshot — report it, do not guess at it.
+
+4. Show the user the `declared` list — the questions the file answers YES — and
+   get explicit agreement that it matches what the app actually does. This is
+   the step that matters. A file can be structurally perfect and still be a
+   false legal declaration.
+
+5. `set_data_safety(package_name="{package_name}", csv_path=...)` with no
+   `confirm`. Show the returned preview. Wait for approval, then call again with
+   `confirm=True` and the token from that preview.
+
+The write returns an empty body, so "success" means Play accepted the file, not
+that it says what you intended. Confirm the result in Play Console.
 """
 
 

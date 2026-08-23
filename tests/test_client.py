@@ -711,3 +711,73 @@ class TestBatchOperations:
         assert result.successful_count == 2
         assert result.failed_count == 0
         assert len(result.results) == 2
+
+
+# ---------------------------------------------------------------------------
+# Request-body validation at the choke point
+# ---------------------------------------------------------------------------
+
+
+def test_execute_refuses_a_body_the_api_cannot_accept():
+    from unittest.mock import MagicMock
+
+    import pytest
+
+    from google_play_console_mcp.client import PlayStoreClient
+    from google_play_console_mcp.errors import ValidationError
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.applications.dataSafety"
+    request.body = '{"safteyLables": "typo"}'
+
+    with pytest.raises(ValidationError, match="safteyLables"):
+        client._execute(request)
+    # Refused before the transport, not after.
+    request.execute.assert_not_called()
+
+
+def test_execute_logs_warnings_but_still_sends():
+    from unittest.mock import MagicMock
+
+    from google_play_console_mcp.client import PlayStoreClient
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.applications.dataSafety"
+    request.body = "{}"  # absent Required field -> warning only
+    request.method = "POST"
+    request.execute.return_value = {"ok": True}
+
+    assert client._execute(request) == {"ok": True}
+
+
+def test_execute_ignores_a_body_that_is_not_json():
+    from unittest.mock import MagicMock
+
+    from google_play_console_mcp.client import PlayStoreClient
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.applications.dataSafety"
+    request.body = "not json at all"
+    request.method = "POST"
+    request.execute.return_value = {"ok": True}
+
+    assert client._execute(request) == {"ok": True}
+
+
+def test_execute_sends_a_clean_body_without_logging_anything():
+    from unittest.mock import MagicMock
+
+    from google_play_console_mcp.client import PlayStoreClient
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.applications.dataSafety"
+    request.body = '{"safetyLabels": "a,b\\nc,d"}'
+    request.method = "POST"
+    request.execute.return_value = {}
+
+    assert client._execute(request) == {}
+    request.execute.assert_called_once()

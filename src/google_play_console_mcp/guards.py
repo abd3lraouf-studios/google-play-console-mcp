@@ -368,14 +368,34 @@ _ECHO_LIMIT = 200
 
 
 def _call_value(key: str, value: Any) -> str:
+    """Render one argument for the "call again with exactly these" block.
+
+    Length is measured on the *rendered* literal, not on the value, because what
+    drowns the block is the rendering. A multi-kilobyte CSV arriving as a
+    one-key dict is not a long string by ``isinstance``, and ``repr`` of it is
+    the whole file — which is how a preview stops being readable, and an
+    unreadable preview is not a safety mechanism.
+    """
     if _looks_secret(key):
         return "<redacted — supply the same value you passed before>"
-    if isinstance(value, str) and len(value) > _ECHO_LIMIT:
+    if isinstance(value, str):
+        if len(value) > _ECHO_LIMIT:
+            return (
+                f"<the same {len(value)}-character text shown above — pass it back unchanged, "
+                f"do not re-type or shorten it>"
+            )
+        return repr(value)
+    rendered = repr(value)
+    if len(rendered) > _ECHO_LIMIT:
+        # The digest is what makes the placeholder checkable: without it a human
+        # cannot tell whether the confirm call carried the value they approved.
+        digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
         return (
-            f"<the same {len(value)}-character text shown above — pass it back unchanged, "
+            f"<the same {type(value).__name__} you passed before "
+            f"({len(rendered)} chars, sha256:{digest}) — pass it back unchanged, "
             f"do not re-type or shorten it>"
         )
-    return repr(value)
+    return rendered
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import json
 import os
 import random
 import re
@@ -19,6 +20,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
+from google_play_console_mcp import body_validation
 from google_play_console_mcp.credentials import PUBLISHER_SCOPES, load_service_account_credentials
 from google_play_console_mcp.edits import EditsMixin
 from google_play_console_mcp.models import (
@@ -433,6 +435,35 @@ class PlayStoreClient(
             self._logger.exception("Failed to initialize API client", error=str(e))
             raise PlayStoreClientError(f"Failed to initialize API client: {e}") from e
 
+    def _validate_request_body(self, request: Any) -> None:
+        """Refuse a request body the API description says cannot be right.
+
+        Done here rather than in each of the 38 tools that take an opaque body:
+        a built request names its own API method, so one check covers every
+        call site, both API planes, and ``android_publisher_invoke`` — and it
+        runs once, before the retry loop, not on every attempt.
+
+        Both guards matter. ``body`` is a JSON string only on a request that
+        actually carries one, and ``methodId`` is a ``str`` only on a real
+        request — on the ``MagicMock`` the test suite injects it is neither, so
+        mocked calls pass straight through.
+        """
+        body = getattr(request, "body", None)
+        method_id = getattr(request, "methodId", None)
+        if not isinstance(body, str) or not isinstance(method_id, str):
+            return
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            return
+        warnings = body_validation.enforce(method_id, payload)
+        if warnings:
+            self._logger.warning(
+                "Request body warnings",
+                method_id=method_id,
+                findings=[f"{w.path} {w.message}" for w in warnings],
+            )
+
     def _execute(self, request: Any) -> Any:
         """Execute a googleapiclient request with retry/backoff.
 
@@ -444,6 +475,8 @@ class PlayStoreClient(
         side effect. Non-transient errors (e.g. 400/403/404) propagate to each
         caller's own ``except HttpError`` handling.
         """
+        self._validate_request_body(request)
+
         method = (getattr(request, "method", "") or "").upper()
         retry_server_errors = method in _IDEMPOTENT_HTTP_METHODS
 

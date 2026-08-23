@@ -35,6 +35,7 @@ from google_play_console_mcp.reporting import (
     _to_datetime,
     metric_set_keys,
 )
+from tests.api_double import unwrap, verified
 
 PKG = "com.example.app"
 
@@ -46,7 +47,7 @@ PKG = "com.example.app"
 
 def _client(reporting_service: MagicMock) -> PlayStoreClient:
     client = PlayStoreClient(credentials_json={"type": "service_account"})
-    client._reporting_service = reporting_service
+    client._reporting_service = verified(reporting_service, api="playdeveloperreporting")
     return client
 
 
@@ -219,10 +220,9 @@ def test_aggregation_periods_and_cohorts_are_the_documented_sets():
 
 
 def test_get_reporting_service_is_cached():
-    service = MagicMock()
-    client = _client(service)
-    assert client._get_reporting_service() is service
-    assert client._get_reporting_service() is service
+    client = _client(MagicMock())
+    first = client._get_reporting_service()
+    assert client._get_reporting_service() is first
 
 
 def test_get_reporting_service_builds_with_reporting_scope():
@@ -269,8 +269,12 @@ def test_get_reporting_service_wraps_build_failure():
 def test_metric_set_resource_api_walks_accessor_path():
     service = MagicMock()
     client = _client(service)
-    assert client._metric_set_resource_api("crash_rate") is _vitals(service, "vitals", "crashrate")
-    assert client._metric_set_resource_api("error_counts") is _vitals(
+    # The accessor walk now runs through the discovery-checked double, so the
+    # node it lands on is a proxy; compare the mock it is standing in front of.
+    assert unwrap(client._metric_set_resource_api("crash_rate")) is _vitals(
+        service, "vitals", "crashrate"
+    )
+    assert unwrap(client._metric_set_resource_api("error_counts")) is _vitals(
         service, "vitals", "errors", "counts"
     )
 
