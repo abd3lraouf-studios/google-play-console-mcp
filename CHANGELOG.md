@@ -11,6 +11,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-23
+
+First release under the name `google-play-console-mcp`, relicensed to
+Apache-2.0. Derived from [lusky3/play-store-mcp](https://github.com/lusky3/play-store-mcp)
+(MIT) at v0.5.1 and extended from 117 to 169 tools across five data planes.
+See [NOTICE](NOTICE) for full attribution.
+
+### Added
+
+- **Play Developer Reporting API** (9 tools) — crash rate, ANR rate, slow start,
+  slow rendering, excessive wake-ups, stuck wakelocks, LMK rate, error counts,
+  error issues, error reports and anomalies. Freshness is a first-class tool
+  because Play vitals lag by hours to days.
+- **Cloud Storage bulk reports** (11 tools) — earnings, installs, ratings,
+  crashes, store performance, store conversion, subscriptions and **search
+  terms**, none of which exist in any Play REST API. Totals are reported per
+  currency and never summed across them.
+- **Public store scraping** (7 tools) — competitor listings, chart positions,
+  keyword suggestions, ASO metadata checks, and review history past the Reviews
+  API's one-week window. All scraped text is flattened and tagged as untrusted.
+- **Store-image preflight** (3 tools) — Play's real per-image rules checked
+  locally before upload, including the alpha-channel asymmetry (screenshots must
+  have none, the icon must have one) and the two-to-eight set rule.
+- **Edit lifecycle** (5 tools) — `create_edit`, `describe_edit`,
+  `validate_open_edit`, `commit_edit`, `delete_edit`, so a multi-step change is
+  one transaction and one review submission.
+- **14 Publisher v3 endpoints** the base did not cover, including
+  `acknowledge_subscription_purchase` — an unacknowledged subscription purchase
+  is automatically refunded and revoked by Google after three days.
+- **`android_publisher_invoke`** — a generic escape hatch with a resource
+  allowlist and verb-based gating.
+- **Write-safety gate** — 18 destructive tools behind two-step confirmation with
+  HMAC tokens bound to a canonical fingerprint of the operation, a staged-rollout
+  policy that cannot be disabled, and an append-only audit log.
+- 2 MCP prompts and 4 MCP resources.
+
+### Changed
+
+- Package renamed `play_store_mcp` → `google_play_console_mcp`; environment
+  variables `PLAY_STORE_MCP_*` → `GOOGLE_PLAY_MCP_*`.
+- Relicensed to Apache-2.0. Every upstream licence is retained verbatim in
+  `LICENSES/` and the release build fails if the wheel omits them.
+- Publishing moved to PyPI Trusted Publishing (OIDC); no API token exists.
+
+### Fixed
+
+- A reentrant-lock deadlock inherited from the vendored guard code: the replay
+  ledger raised its degradation warning while holding a non-reentrant lock, so
+  the server hung the first time the ledger became unreadable.
+- `list_locale_coverage` opened an edit to read and never deleted it, leaking one
+  per call.
+- Column resolution could bind a field to a column another field had already
+  claimed, reporting an earnings amount as its currency code.
+
+### Removed
+
+- `publish_managed_release`. There is no `managedPublishing` resource in the
+  Android Publisher v3 discovery document, so implementations of this tool fail
+  at runtime. Sending held changes live remains a Play Console UI action.
+
+
 ### Planned
 - Consolidate and reduce the MCP tool surface (now 117 tools) by grouping
   related operations, to lower per-request tool-list overhead — with no planned

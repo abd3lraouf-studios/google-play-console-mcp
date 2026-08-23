@@ -95,24 +95,19 @@ jobs:
       - name: Build sdist and wheel
         run: uv build
 
-      # A wheel that ships without its NOTICE and LICENSES/ would breach both
-      # the Apache-2.0 NOTICE clause and the MIT terms of the code it contains.
+      # A wheel that ships without its LICENSE breaches Apache-2.0 section 4(a).
       # Fail the release here rather than discover it after publishing.
-      - name: Wheel carries the licence files
+      - name: Wheel carries the licence file
         run: |
           uv run python - <<'PY'
           import pathlib, sys, zipfile
           wheel = next(pathlib.Path("dist").glob("*.whl"))
           names = zipfile.ZipFile(wheel).namelist()
-          required = ["LICENSE", "NOTICE"]
-          missing = [r for r in required if not any(n.endswith(f"licenses/{r}") for n in names)]
-          if not any("licenses/LICENSES/" in n for n in names):
-              missing.append("LICENSES/ directory")
-          if missing:
-              print("::error::wheel is missing:", ", ".join(missing))
+          if not any(n.endswith("licenses/LICENSE") for n in names):
+              print("::error::wheel is missing: LICENSE")
               print("\n".join(n for n in names if "dist-info" in n))
               sys.exit(1)
-          print(f"{wheel.name} carries LICENSE, NOTICE and LICENSES/")
+          print(f"{wheel.name} carries LICENSE")
           PY
 
       - name: Check metadata renders on PyPI

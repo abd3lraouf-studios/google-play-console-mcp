@@ -18,11 +18,11 @@ RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --frozen --no-editable
 # Runtime stage
 FROM python:3.14-alpine@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5520e806b1709f92
 
-LABEL org.opencontainers.image.source="https://github.com/lusky3/play-store-mcp"
-LABEL org.opencontainers.image.url="https://github.com/lusky3/play-store-mcp"
-LABEL org.opencontainers.image.documentation="https://lusky3.github.io/google-play-console-mcp"
+LABEL org.opencontainers.image.source="https://github.com/abd3lraouf-studios/google-play-console-mcp"
+LABEL org.opencontainers.image.url="https://github.com/abd3lraouf-studios/google-play-console-mcp"
+LABEL org.opencontainers.image.documentation="https://abd3lraouf-studios.github.io/google-play-console-mcp"
 LABEL org.opencontainers.image.description="MCP server for Google Play Developer API — deploy apps, manage releases, reviews, and more"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.title="google-play-console-mcp"
 
 # Security hardening: non-root user, no shell

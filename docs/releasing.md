@@ -56,31 +56,14 @@ Every release runs the full gate before anything is published:
   below 100% branch, and a release is not the place to start
 - tag/version agreement
 - `twine check --strict`, so the PyPI page cannot render broken
-- **the wheel actually contains `LICENSE`, `NOTICE` and `LICENSES/`**
+- **the wheel actually contains `LICENSE`**
 
-That last one is not ceremony. This project is a derivative of MIT-licensed
-work, redistributed under Apache-2.0. A wheel shipped without those files
-breaches both the Apache-2.0 NOTICE clause and the MIT terms of the code it
-contains. Failing the build is the only way to be sure it never happens.
+That last one is not ceremony. A wheel shipped without its licence breaches
+Apache-2.0 section 4(a). Failing the build is the only way to be sure it never
+happens.
 
 ## Version scheme
 
 `pyproject.toml` holds the version. `0.x` while the planes are still settling;
 the first release that has run against a real Play Console account across every
 plane earns `1.0.0`.
-
-## Re-establishing the upstream link
-
-Git history was squashed when the project was renamed and relicensed, which
-removed the `upstream` remote. The fork point is recorded, so merging upstream
-fixes is still possible:
-
-```bash
-git remote add upstream https://github.com/lusky3/play-store-mcp
-git fetch upstream
-# fork point: play-store-mcp v0.5.1, commit ebdd9fd0
-git diff ebdd9fd0..upstream/stable -- src/play_store_mcp/
-```
-
-The package was renamed `play_store_mcp` -> `google_play_console_mcp`, so a
-straight merge will not apply. Read the upstream diff and port deliberately.

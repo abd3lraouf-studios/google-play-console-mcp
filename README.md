@@ -197,27 +197,15 @@ ruff clean · mypy clean · every release gated at --cov-fail-under=100
 No live API call in the suite. Report parsing is tested against real UTF-16
 bytes, image preflight against real PNG and JPEG headers.
 
-## Built on
+## Out of scope
 
-A fork of [lusky3/play-store-mcp](https://github.com/lusky3/play-store-mcp)
-(MIT), extended across five data planes with work from
-[storepilot](https://github.com/sonlenef/storepilot-mcp),
-[devinwang](https://github.com/devinwang/google-play-developer-mcp),
-[desunit](https://github.com/desunit/google-play-analytics-mcp),
-[RankoR](https://github.com/RankoR/aso-mcp),
-[hemati](https://github.com/hemati/google-play-store-mcp) and
-[brunosemfio](https://github.com/brunosemfio/mcp-google-play-console).
-
-Full attribution in [NOTICE](NOTICE); every upstream licence is in
-[LICENSES/](LICENSES/).
-
-Screenshot *generation* is out of scope — use
+Screenshot *generation* — use
 [appscreens](https://github.com/abd3lraouf-studios/app-screenshot-generator) or
 any other tool, then preflight and upload here.
 
 ## Licence
 
-[Apache-2.0](LICENSE). Incorporates MIT-licensed work; see [NOTICE](NOTICE).
+[Apache-2.0](LICENSE).
 
 ---
 

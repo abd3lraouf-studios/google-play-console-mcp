@@ -1,8 +1,8 @@
 site_name: Google Play Console MCP Server
-site_url: https://lusky3.github.io/google-play-console-mcp
+site_url: https://abd3lraouf-studios.github.io/google-play-console-mcp
 site_description: MCP server for Google Play Developer API — deploy apps, manage releases, reviews, and more
-repo_url: https://github.com/lusky3/play-store-mcp
-repo_name: lusky3/play-store-mcp
+repo_url: https://github.com/abd3lraouf-studios/google-play-console-mcp
+repo_name: abd3lraouf-studios/google-play-console-mcp
 edit_uri: edit/main/docs/
 
 theme:
