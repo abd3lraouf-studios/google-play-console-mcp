@@ -46,11 +46,18 @@ $EDITOR pyproject.toml
 
 # 2. move [Unreleased] in CHANGELOG.md to the new version, and add its link
 
-# 3. commit, then tag, which triggers the publish
+# 3. optional dry run: the whole gate, with no publish and no version spent
+gh workflow run release.yml
+
+# 4. commit, then tag, which triggers the publish
 git tag -a v0.7.0 -m "0.7.0"
 git push origin main
 git push origin v0.7.0
 ```
+
+**Only a tag publishes.** Running the workflow by hand is always a dry run — it
+verifies and builds, then stops. That is what the TestPyPI rehearsal used to be
+for, minus the second account.
 
 Pushing the tag publishes. There is no approval prompt, so make sure the version
 in `pyproject.toml` and the tag agree before pushing — though the workflow

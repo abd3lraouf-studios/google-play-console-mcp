@@ -5,6 +5,9 @@ name: Release
 # signed identity claim instead. Setup is one form on pypi.org — see
 # docs/releasing.md.
 #
+# Pushing a v* tag publishes. Running the workflow by hand does not: that is a
+# dry run of the whole gate, which is what the TestPyPI rehearsal used to be for.
+#
 # There is deliberately no TestPyPI rehearsal. It was never registered as a
 # trusted publisher, so the step failed on every release for five releases while
 # real publishing worked. What it would have caught -- a wheel that does not
@@ -15,6 +18,8 @@ on:
   push:
     tags:
       - "v*"
+  # A manual run is a dry run: verify and build, no publish. Use it to check
+  # the gate passes before tagging.
   workflow_dispatch:
 
 permissions:
@@ -174,7 +179,12 @@ jobs:
 
   pypi:
     name: Publish to PyPI
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Tags only. A manual run is a dry run: it proves the release gate passes
+    # without spending a version number. Publishing on dispatch too meant every
+    # manual run after a release tried to re-upload the version already on PyPI
+    # and failed on "File already exists" — a permanent red mark for a run that
+    # was working exactly as intended.
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     environment:

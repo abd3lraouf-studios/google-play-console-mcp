@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   import. This has to run before the upload, because a PyPI version number can
   never be reused.
 
+- Running the release workflow by hand is now a dry run: it verifies and builds
+  but does not publish. Publishing happens on a `v*` tag and nowhere else.
+  Previously a manual run also published, so every manual run after a release
+  tried to re-upload the version already on PyPI and failed on
+  `File already exists` — a permanent red mark on a run that was doing exactly
+  what it should.
+
 - Removed the TestPyPI rehearsal job, its `workflow_dispatch` target input, the
   `testpypi` environment, and the section of `docs/releasing.md` that
   prescribed it. No trusted publisher was ever registered on test.pypi.org, so
