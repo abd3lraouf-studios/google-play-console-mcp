@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import http.client
 import json
 import os
 import random
 import re
+import socket
+import ssl
 import tempfile
 import threading
 import time
@@ -180,6 +183,19 @@ def _is_retryable_status(status: int, *, retry_server_errors: bool) -> bool:
     return retry_server_errors and status in (500, 503)
 
 
+# Connection-level failures that mean the request never got an answer. httplib2
+# reuses a keep-alive socket across calls, so an idle server-side close surfaces
+# on the *next* request rather than the one that went stale.
+_TRANSPORT_ERRORS = (
+    BrokenPipeError,
+    ConnectionResetError,
+    ConnectionAbortedError,
+    ssl.SSLError,
+    http.client.HTTPException,
+    socket.timeout,
+)
+
+
 def _run_with_backoff(call, *, retry_server_errors=True):  # type: ignore[no-untyped-def]
     """Run ``call`` with exponential-backoff retries on transient errors."""
     retries = 0
@@ -188,6 +204,26 @@ def _run_with_backoff(call, *, retry_server_errors=True):  # type: ignore[no-unt
     while retries < MAX_RETRIES:
         try:
             return call()
+        except _TRANSPORT_ERRORS as e:
+            # A keep-alive socket Google closed while the client sat idle: the
+            # next request dies on the write (BrokenPipe) or the read (SSL
+            # UNEXPECTED_EOF) before it ever reaches the API. Retried only for
+            # idempotent methods, on the same reasoning as a 5xx — the request
+            # may already have been applied.
+            if not retry_server_errors:
+                raise
+            retries += 1
+            if retries >= MAX_RETRIES:
+                raise
+            sleep_time = backoff * (0.5 + random.random())  # noqa: S311 # nosec B311 — non-crypto jitter for retry backoff
+            logger.warning(
+                "Transport error, retrying",
+                error=type(e).__name__,
+                retry=retries,
+                sleep=sleep_time,
+            )
+            time.sleep(sleep_time)
+            backoff = min(backoff * 2, MAX_BACKOFF)
         except HttpError as e:
             if not _is_retryable_status(e.resp.status, retry_server_errors=retry_server_errors):
                 raise
@@ -486,7 +522,20 @@ class PlayStoreClient(
             with self._http_lock:
                 return request.execute()
 
-        return _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors)
+        try:
+            return _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors)
+        except _TRANSPORT_ERRORS:
+            # The socket this request died on is cached inside the service, so
+            # the *next* call inherits it and fails the same way — which is
+            # exactly what the consecutive failures in the logs look like. Drop
+            # the services so the following call builds a fresh transport.
+            self._discard_services()
+            raise
+
+    def _discard_services(self) -> None:
+        """Forget the cached API services, and with them their dead sockets."""
+        self._service = None
+        self._reporting_service = None
 
     def _create_edit(self, package_name: str) -> str:
         """Create a new edit for the package.

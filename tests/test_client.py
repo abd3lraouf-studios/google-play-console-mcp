@@ -781,3 +781,79 @@ def test_execute_sends_a_clean_body_without_logging_anything():
 
     assert client._execute(request) == {}
     request.execute.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Transport-level failures (a keep-alive socket the server closed while idle)
+# ---------------------------------------------------------------------------
+
+
+def test_execute_retries_a_broken_pipe_on_an_idempotent_request():
+    from unittest.mock import MagicMock, patch
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.edits.get"
+    request.body = None
+    request.method = "GET"
+    # httplib2 reuses a socket Google has already closed: the write fails, and
+    # the retry — on a fresh connection — succeeds.
+    request.execute.side_effect = [BrokenPipeError(32, "Broken pipe"), {"ok": True}]
+
+    with patch("google_play_console_mcp.client.time.sleep"):
+        assert client._execute(request) == {"ok": True}
+    assert request.execute.call_count == 2
+
+
+def test_execute_does_not_retry_a_broken_pipe_on_a_write():
+    from unittest.mock import MagicMock
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.edits.insert"
+    request.body = None
+    request.method = "POST"
+    request.execute.side_effect = BrokenPipeError(32, "Broken pipe")
+
+    # A POST may already have been applied server-side; retrying could duplicate
+    # the side effect, so it propagates — the same policy as a 5xx.
+    with pytest.raises(BrokenPipeError):
+        client._execute(request)
+    assert request.execute.call_count == 1
+
+
+def test_execute_discards_the_cached_services_after_a_transport_error():
+    import ssl
+    from unittest.mock import MagicMock
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    client._service = MagicMock()
+    client._reporting_service = MagicMock()
+    request = MagicMock()
+    request.methodId = "androidpublisher.edits.insert"
+    request.body = None
+    request.method = "POST"
+    request.execute.side_effect = ssl.SSLError("UNEXPECTED_EOF_WHILE_READING")
+
+    with pytest.raises(ssl.SSLError):
+        client._execute(request)
+    # Otherwise the next call inherits the same dead socket and fails again.
+    assert client._service is None
+    assert client._reporting_service is None
+
+
+def test_execute_gives_up_on_a_transport_error_that_never_clears():
+    from unittest.mock import MagicMock, patch
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    request = MagicMock()
+    request.methodId = "androidpublisher.edits.get"
+    request.body = None
+    request.method = "GET"
+    # Not a stale socket but a real outage: the retries run out and the caller
+    # sees the transport error rather than an invented one.
+    request.execute.side_effect = ConnectionResetError(54, "Connection reset by peer")
+
+    with patch("google_play_console_mcp.client.time.sleep"), pytest.raises(ConnectionResetError):
+        client._execute(request)
+    assert request.execute.call_count > 1
