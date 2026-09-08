@@ -63,6 +63,7 @@ from google_play_console_mcp.guards import (
     unguarded,
 )
 from google_play_console_mcp.install import run_cli as run_install_cli
+from google_play_console_mcp.observability import ToolCallAuditor
 from google_play_console_mcp.reporting import METRIC_SETS, ReportingClientError
 from google_play_console_mcp.reports import (
     earnings_by_app,
@@ -336,6 +337,12 @@ mcp = FastMCP(
     lifespan=lifespan,
     transforms=_build_transforms(),
 )
+
+# Record failing tool calls to a durable log. The MCP client's own logs note
+# that a tool completed but not what it answered, so a tool that returns an
+# error payload — the most common failure here — leaves no trace anywhere the
+# user would look. See observability.py.
+mcp.add_middleware(ToolCallAuditor())
 
 
 # =============================================================================

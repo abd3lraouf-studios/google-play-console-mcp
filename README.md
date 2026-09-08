@@ -243,6 +243,33 @@ See [Write safety](docs/write-safety.md).
   and requires a dimension for some metric sets (`startType`, `reportType`).
   The accepted combinations are filled in for you.
 
+## The failure log
+
+Tool calls that fail are appended to `~/.local/state/google-play-console-mcp/tool-failures.jsonl`
+as one JSON object per line: timestamp, tool, outcome, detail, duration and the
+(redacted) arguments.
+
+This exists because an MCP client's logs record that a tool *completed*, not
+what it answered. A tool that returns `{"error": ...}` — how this server reports
+validation failures, missing configuration and partial successes — is written
+down as a success, so the most common kind of failure leaves no trace anywhere
+you would think to look. The log records both shapes: `raised` for an exception,
+`returned_error` for an error-shaped payload.
+
+Arguments whose names look sensitive (`purchase_token`, `apiKey`, anything
+matching token/credential/secret/password) are redacted, long values truncated,
+and the file rotates at 5 MB keeping one previous generation. Writing is
+best-effort: a full disk can never fail a tool call.
+
+- `GOOGLE_PLAY_MCP_AUDIT_LOG=/path/to/log.jsonl` — write somewhere else.
+- `GOOGLE_PLAY_MCP_NO_AUDIT_LOG=1` — switch it off.
+
+```bash
+# what has been failing, most frequent first
+jq -r '.tool + " — " + .detail' ~/.local/state/google-play-console-mcp/tool-failures.jsonl \
+  | sort | uniq -c | sort -rn
+```
+
 ## Tools
 
 170 tools. Full reference in [docs/](https://github.com/abd3lraouf-studios/google-play-console-mcp/tree/main/docs).
