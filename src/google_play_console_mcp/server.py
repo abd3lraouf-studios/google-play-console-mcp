@@ -4339,7 +4339,7 @@ def search_error_issues(
         filter_expression: Optional API filter (e.g., 'errorIssueType = CRASH')
         days_back: Window size ending now, in days (default 7)
         order_by: Sort expression (e.g., 'errorReportCount desc')
-        sample_report_limit: Sample report names to attach per issue
+        sample_report_limit: Sample report names to attach per issue — 0 or 1 only
         max_results: Maximum number of issues to return (default 50)
 
     Returns:

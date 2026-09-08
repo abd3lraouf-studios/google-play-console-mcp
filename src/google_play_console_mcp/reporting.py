@@ -118,6 +118,144 @@ AGGREGATION_PERIODS = frozenset({"HOURLY", "DAILY", "FULL_RANGE"})
 USER_COHORTS = frozenset({"OS_PUBLIC", "OS_BETA", "APP_TESTERS"})
 
 
+# Metric set -> aggregation period -> (metrics, required dimensions).
+#
+# The API has no "give me the default metrics" mode: a query with no `metrics`
+# is rejected with "At least one 'metric' should be specified", and a query
+# whose metrics/dimensions/period do not form one of the combinations the API
+# publishes is rejected with a wall of alternatives. Both are 400s an agent
+# cannot recover from without already knowing the answer, so the answer lives
+# here and is filled in when the caller omits it.
+#
+# Two traps this encodes, neither guessable from the metric set's own name:
+# the metric for stuckBackgroundWakelockRateMetricSet is `stuckBgWakelockRate`,
+# and slow_start_rate / error_counts REQUIRE a dimension (startType /
+# reportType) — omitting it is a 400, not a coarser result.
+#
+# Verified against the live API on 2026-09-08 by sending a deliberately bogus
+# metric and reading the combinations it enumerates back.
+DEFAULT_QUERY_SHAPE: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = {
+    "crash_rate": {
+        "HOURLY": (("crashRate", "userPerceivedCrashRate", "distinctUsers"), ()),
+        "DAILY": (
+            (
+                "crashRate",
+                "crashRate7dUserWeighted",
+                "crashRate28dUserWeighted",
+                "userPerceivedCrashRate",
+                "userPerceivedCrashRate7dUserWeighted",
+                "userPerceivedCrashRate28dUserWeighted",
+                "distinctUsers",
+            ),
+            (),
+        ),
+    },
+    "anr_rate": {
+        "HOURLY": (("anrRate", "userPerceivedAnrRate", "distinctUsers"), ()),
+        "DAILY": (
+            (
+                "anrRate",
+                "anrRate7dUserWeighted",
+                "anrRate28dUserWeighted",
+                "userPerceivedAnrRate",
+                "userPerceivedAnrRate7dUserWeighted",
+                "userPerceivedAnrRate28dUserWeighted",
+                "distinctUsers",
+            ),
+            (),
+        ),
+    },
+    "slow_start_rate": {
+        "DAILY": (
+            (
+                "slowStartRate",
+                "slowStartRate7dUserWeighted",
+                "slowStartRate28dUserWeighted",
+                "distinctUsers",
+            ),
+            ("startType",),
+        ),
+    },
+    # slow_rendering_rate is deliberately absent. It is games-only ("resource is
+    # only accessible to games"), so its combinations could not be read back from
+    # the API and are not guessed here — an unfilled query reaches the API and
+    # returns that message, which is the useful answer.
+    "excessive_wakeup_rate": {
+        "DAILY": (
+            (
+                "excessiveWakeupRate",
+                "excessiveWakeupRate7dUserWeighted",
+                "excessiveWakeupRate28dUserWeighted",
+                "distinctUsers",
+            ),
+            (),
+        ),
+    },
+    "stuck_background_wakelock_rate": {
+        "DAILY": (
+            (
+                "stuckBgWakelockRate",
+                "stuckBgWakelockRate7dUserWeighted",
+                "stuckBgWakelockRate28dUserWeighted",
+                "distinctUsers",
+            ),
+            (),
+        ),
+    },
+    "lmk_rate": {
+        "DAILY": (
+            (
+                "userPerceivedLmkRate",
+                "userPerceivedLmkRate7dUserWeighted",
+                "userPerceivedLmkRate28dUserWeighted",
+                "distinctUsers",
+            ),
+            (),
+        ),
+    },
+    "error_counts": {
+        "HOURLY": (("errorReportCount", "distinctUsers"), ("reportType",)),
+        "DAILY": (("errorReportCount", "distinctUsers"), ("reportType",)),
+        "FULL_RANGE": (("errorReportCount", "distinctUsers"), ("reportType",)),
+    },
+}
+
+
+def _fill_query_shape(
+    metric_set: str,
+    aggregation_period: str,
+    metrics: Sequence[str] | None,
+    dimensions: Sequence[str] | None,
+) -> tuple[list[str], list[str]]:
+    """Complete a query's metrics and dimensions with what the API demands.
+
+    The API publishes no default metric set for a query, and rejects a query
+    missing a dimension the set requires, so both are filled in when the caller
+    did not name them.
+    """
+    default_metrics, required_dimensions = default_query_shape(metric_set, aggregation_period)
+    query_metrics = list(metrics) if metrics else list(default_metrics)
+    query_dimensions = list(dimensions) if dimensions else []
+    for dimension in required_dimensions:
+        if dimension not in query_dimensions:
+            query_dimensions.append(dimension)
+    return query_metrics, query_dimensions
+
+
+def default_query_shape(
+    metric_set: str, aggregation_period: str
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return the (metrics, required dimensions) the API accepts for a set.
+
+    Falls back to the DAILY shape when a period has no entry of its own, and to
+    an empty shape for a metric set this table does not cover, so an unknown
+    combination still reaches the API and fails with its own message rather
+    than one invented here.
+    """
+    shapes = DEFAULT_QUERY_SHAPE.get(metric_set, {})
+    return shapes.get(aggregation_period) or shapes.get("DAILY") or ((), ())
+
+
 def metric_set_keys() -> list[str]:
     """Return the short keys of every supported metric set."""
     return sorted(METRIC_SETS)
@@ -172,16 +310,23 @@ def _to_datetime(value: dict[str, Any] | str | None) -> datetime | None:
         return None
 
 
-def _date_to_api(value: datetime) -> dict[str, int]:
-    """Render a datetime as a google.type.DateTime body for timelineSpec."""
-    return {
-        "year": value.year,
-        "month": value.month,
-        "day": value.day,
-        "hours": value.hour,
-        "minutes": value.minute,
-        "seconds": value.second,
-    }
+def _date_to_api(value: datetime, aggregation_period: str = "DAILY") -> dict[str, int]:
+    """Render a datetime as a google.type.DateTime body for timelineSpec.
+
+    The timestamp must be aligned to the aggregation period, and the API is
+    strict about it: a DAILY window carrying an hour is rejected with "Hours
+    should be unset for DAILY aggregation period", and any window carrying
+    minutes with "Minutes, seconds and nanos should be unset". Since the
+    natural way to build a window is ``datetime.now(UTC) - timedelta(...)``,
+    which always carries all three, every unaligned call is a guaranteed 400.
+    Truncating here rather than asking the caller to is what makes the obvious
+    call work.
+    """
+    body = {"year": value.year, "month": value.month, "day": value.day}
+    if aggregation_period != "DAILY":
+        # HOURLY and FULL_RANGE accept an hour; only DAILY forbids it.
+        body["hours"] = value.hour
+    return body
 
 
 def _dimension_value(entry: dict[str, Any]) -> Any:
@@ -492,6 +637,63 @@ class ReportingMixin:
                 )
         return results
 
+    def _latest_freshness(
+        self, package_name: str, metric_set: str, aggregation_period: str
+    ) -> datetime | None:
+        """Latest timestamp with data for one metric set and aggregation period.
+
+        Returns None when the metadata call fails or the period is not listed,
+        so a freshness lookup can never be the reason a query does not run.
+        """
+        try:
+            info = self.get_metric_set(package_name, metric_set)
+        except Exception as e:  # noqa: BLE001 - freshness is an optimisation, not a gate
+            self._logger.warning(
+                "Could not read metric set freshness",
+                package_name=package_name,
+                metric_set=metric_set,
+                error=str(e),
+            )
+            return None
+        for entry in info.freshness:
+            if entry.aggregation_period == aggregation_period:
+                return entry.latest_end_time
+        return None
+
+    def _resolve_window(
+        self,
+        package_name: str,
+        metric_set: str,
+        aggregation_period: str,
+        days_back: int,
+        start_time: datetime | None,
+        end_time: datetime | None,
+    ) -> tuple[datetime, datetime]:
+        """Resolve a query window that the API will actually accept.
+
+        The window may not run past the data's freshness: the API rejects a
+        later end time outright ("should be at most the current freshness ..."),
+        and vitals lag reality by days. A window ending "now" — the obvious
+        default — is therefore always invalid, which is why the end is clamped
+        rather than merely reported. An explicit end_time is clamped too:
+        returning the data that exists beats a 400 the caller cannot act on.
+
+        Raises:
+            ReportingClientError: if the window is empty once clamped.
+        """
+        latest = self._latest_freshness(package_name, metric_set, aggregation_period)
+        window_end = end_time or latest or datetime.now(UTC)
+        if latest and window_end > latest:
+            window_end = latest
+        window_start = start_time or (window_end - timedelta(days=days_back))
+        if window_start > window_end:
+            raise ReportingClientError(
+                f"Empty window for {metric_set}: start {window_start.isoformat()} is after the "
+                f"latest data available ({window_end.isoformat()}). Play vitals lag by days; "
+                f"call get_vitals_freshness to see how far behind this metric set is."
+            )
+        return window_start, window_end
+
     def query_metric_set(
         self,
         package_name: str,
@@ -512,11 +714,15 @@ class ReportingMixin:
             package_name: App package name.
             metric_set: Short metric set key, e.g. crash_rate.
             metrics: Metric names to return, e.g. ["crashRate", "distinctUsers"].
-                Defaults to whatever the API returns for the set.
+                Defaults to the combination the API accepts for this set and
+                aggregation period; the API has no default of its own.
             dimensions: Dimensions to slice by, e.g. ["versionCode", "countryCode"].
-            days_back: Window size ending now, used when start_time is not given.
+                A dimension the set requires (startType, reportType) is added
+                automatically.
+            days_back: Window size, counted back from the end of the window.
             start_time: Explicit window start. Overrides days_back.
-            end_time: Explicit window end. Defaults to now.
+            end_time: Explicit window end. Defaults to the latest timestamp with
+                data, and is clamped to it — the API refuses a later one.
             aggregation_period: HOURLY, DAILY or FULL_RANGE.
             filter_expression: API filter string, e.g. 'versionCode = 42'.
             user_cohort: OS_PUBLIC, OS_BETA or APP_TESTERS.
@@ -527,7 +733,8 @@ class ReportingMixin:
 
         Raises:
             ReportingClientError: on an unknown metric set, aggregation period
-                or user cohort.
+                or user cohort, or when the window is empty once clamped to the
+                available data.
         """
         if aggregation_period not in AGGREGATION_PERIODS:
             raise ReportingClientError(
@@ -542,20 +749,25 @@ class ReportingMixin:
         name = _metric_set_resource(package_name, metric_set)
         api = self._metric_set_resource_api(metric_set)
 
-        window_end = end_time or datetime.now(UTC)
-        window_start = start_time or (window_end - timedelta(days=days_back))
+        window_start, window_end = self._resolve_window(
+            package_name, metric_set, aggregation_period, days_back, start_time, end_time
+        )
+
+        query_metrics, query_dimensions = _fill_query_shape(
+            metric_set, aggregation_period, metrics, dimensions
+        )
 
         body: dict[str, Any] = {
             "timelineSpec": {
                 "aggregationPeriod": aggregation_period,
-                "startTime": _date_to_api(window_start),
-                "endTime": _date_to_api(window_end),
+                "startTime": _date_to_api(window_start, aggregation_period),
+                "endTime": _date_to_api(window_end, aggregation_period),
             },
         }
-        if metrics:
-            body["metrics"] = list(metrics)
-        if dimensions:
-            body["dimensions"] = list(dimensions)
+        if query_metrics:
+            body["metrics"] = query_metrics
+        if query_dimensions:
+            body["dimensions"] = query_dimensions
         if filter_expression:
             body["filter"] = filter_expression
         if user_cohort:
@@ -646,12 +858,25 @@ class ReportingMixin:
                 'errorIssueType = CRASH'.
             days_back: Window size ending now.
             order_by: Sort expression, e.g. 'errorReportCount desc'.
-            sample_report_limit: How many sample report names to attach per issue.
+            sample_report_limit: How many sample report names to attach per
+                issue. The API accepts only 0 or 1.
             max_results: Maximum number of issues to return.
 
         Returns:
             Grouped error issues.
+
+        Raises:
+            ReportingClientError: if sample_report_limit is neither 0 nor 1.
         """
+        # The API rejects anything else with "'sample_error_reports' field only
+        # supports the values 0 and 1" — a 400 after the request has gone out.
+        # Caught here so the limit reads as the flag it actually is.
+        if sample_report_limit is not None and sample_report_limit not in (0, 1):
+            raise ReportingClientError(
+                f"sample_report_limit must be 0 or 1, got {sample_report_limit}. "
+                f"The API attaches at most one sample report per issue; use "
+                f"search_error_reports for more."
+            )
         service = self._get_reporting_service()
         end = datetime.now(UTC)
         start = end - timedelta(days=days_back)

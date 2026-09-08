@@ -22,6 +22,7 @@ from google_play_console_mcp.models import (
 )
 from google_play_console_mcp.reporting import (
     AGGREGATION_PERIODS,
+    DEFAULT_QUERY_SHAPE,
     METRIC_SETS,
     USER_COHORTS,
     ReportingClientError,
@@ -33,6 +34,7 @@ from google_play_console_mcp.reporting import (
     _parse_freshness,
     _parse_row,
     _to_datetime,
+    default_query_shape,
     metric_set_keys,
 )
 from tests.api_double import unwrap, verified
@@ -154,9 +156,19 @@ def test_to_datetime_handles_missing_and_malformed():
     assert _to_datetime({"year": "x", "month": 1, "day": 1}) is None
 
 
-def test_date_to_api_roundtrip():
-    body = _date_to_api(datetime(2026, 8, 23, 5, 6, 7, tzinfo=UTC))
-    assert body == {"year": 2026, "month": 8, "day": 23, "hours": 5, "minutes": 6, "seconds": 7}
+def test_date_to_api_drops_the_hour_for_daily():
+    # The API rejects a DAILY window carrying an hour: "Hours should be unset
+    # for DAILY aggregation period with 'start_time' and 'end_time'."
+    body = _date_to_api(datetime(2026, 8, 23, 5, 6, 7, tzinfo=UTC), "DAILY")
+    assert body == {"year": 2026, "month": 8, "day": 23}
+
+
+def test_date_to_api_keeps_the_hour_but_never_minutes():
+    # HOURLY and FULL_RANGE accept an hour; every period rejects minutes and
+    # seconds ("Minutes, seconds and nanos should be unset").
+    for period in ("HOURLY", "FULL_RANGE"):
+        body = _date_to_api(datetime(2026, 8, 23, 5, 6, 7, tzinfo=UTC), period)
+        assert body == {"year": 2026, "month": 8, "day": 23, "hours": 5}
 
 
 def test_dimension_value_prefers_typed_fields():
@@ -427,6 +439,142 @@ def test_query_metric_set_builds_timeline_and_parses_rows():
     assert body["timelineSpec"]["startTime"]["year"] >= 2020
 
 
+def _fresh(api: MagicMock, period: str, latest: str) -> None:
+    """Make the metric set report a freshness, as the real API does."""
+    api.get.return_value.execute.return_value = {
+        "freshnessInfo": {"freshnesses": [{"aggregationPeriod": period, "latestEndTime": latest}]}
+    }
+
+
+def test_query_metric_set_clamps_the_window_to_the_freshness():
+    # Vitals lag reality by days, and the API rejects an end time past the
+    # freshness outright, so a window ending "now" — the default — is always a
+    # 400 unless it is pulled back to the data that exists.
+    service = MagicMock()
+    api = _vitals(service, "vitals", "crashrate")
+    _fresh(api, "DAILY", "2026-09-03T00:00:00Z")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(PKG, "crash_rate", days_back=7)
+
+    spec = api.query.call_args.kwargs["body"]["timelineSpec"]
+    assert spec["endTime"] == {"year": 2026, "month": 9, "day": 3}
+    assert spec["startTime"] == {"year": 2026, "month": 8, "day": 27}
+
+
+def test_query_metric_set_clamps_an_explicit_end_time_too():
+    service = MagicMock()
+    api = _vitals(service, "vitals", "crashrate")
+    _fresh(api, "DAILY", "2026-09-03T00:00:00Z")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(
+        PKG,
+        "crash_rate",
+        start_time=datetime(2026, 9, 1, tzinfo=UTC),
+        end_time=datetime(2026, 9, 8, tzinfo=UTC),
+    )
+
+    spec = api.query.call_args.kwargs["body"]["timelineSpec"]
+    assert spec["endTime"] == {"year": 2026, "month": 9, "day": 3}
+
+
+def test_query_metric_set_rejects_a_window_that_clamps_to_nothing():
+    service = MagicMock()
+    api = _vitals(service, "vitals", "crashrate")
+    _fresh(api, "DAILY", "2026-09-03T00:00:00Z")
+
+    with pytest.raises(ReportingClientError, match="Empty window"):
+        _client(service).query_metric_set(
+            PKG, "crash_rate", start_time=datetime(2026, 9, 5, tzinfo=UTC)
+        )
+
+
+def test_query_metric_set_fills_in_metrics_the_api_demands():
+    # A query with no metrics is a 400: "At least one 'metric' should be
+    # specified". The API publishes no default, so the client supplies one.
+    service = MagicMock()
+    api = _vitals(service, "vitals", "crashrate")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(PKG, "crash_rate")
+
+    assert api.query.call_args.kwargs["body"]["metrics"] == list(
+        DEFAULT_QUERY_SHAPE["crash_rate"]["DAILY"][0]
+    )
+
+
+def test_query_metric_set_adds_a_required_dimension():
+    # error_counts without reportType is a 400, not a coarser result.
+    service = MagicMock()
+    api = _vitals(service, "vitals", "errors", "counts")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(PKG, "error_counts", dimensions=["versionCode"])
+
+    assert api.query.call_args.kwargs["body"]["dimensions"] == ["versionCode", "reportType"]
+
+
+def test_query_metric_set_does_not_duplicate_a_required_dimension():
+    service = MagicMock()
+    api = _vitals(service, "vitals", "errors", "counts")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(PKG, "error_counts", dimensions=["reportType", "versionCode"])
+
+    assert api.query.call_args.kwargs["body"]["dimensions"] == ["reportType", "versionCode"]
+
+
+def test_default_query_shape_falls_back_to_daily_then_to_nothing():
+    assert (
+        default_query_shape("crash_rate", "FULL_RANGE")
+        == DEFAULT_QUERY_SHAPE["crash_rate"]["DAILY"]
+    )
+    # An unmapped set (slow_rendering_rate is games-only, so its combinations
+    # could not be read back) must reach the API and fail with its own message.
+    assert default_query_shape("slow_rendering_rate", "DAILY") == ((), ())
+
+
+def test_search_error_issues_rejects_a_sample_limit_the_api_refuses():
+    with pytest.raises(ReportingClientError, match="must be 0 or 1"):
+        _client(MagicMock()).search_error_issues(PKG, sample_report_limit=2)
+
+
+def test_query_metric_set_runs_unclamped_when_the_period_has_no_freshness():
+    # crash_rate publishes HOURLY and DAILY freshness but not FULL_RANGE. An
+    # unlisted period must not block the query — it just goes out unclamped.
+    service = MagicMock()
+    api = _vitals(service, "vitals", "crashrate")
+    _fresh(api, "DAILY", "2026-09-03T00:00:00Z")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(
+        PKG,
+        "crash_rate",
+        start_time=datetime(2026, 9, 1, tzinfo=UTC),
+        end_time=datetime(2026, 9, 8, tzinfo=UTC),
+        aggregation_period="FULL_RANGE",
+    )
+
+    spec = api.query.call_args.kwargs["body"]["timelineSpec"]
+    assert spec["endTime"]["day"] == 8
+
+
+def test_query_metric_set_sends_no_metrics_for_an_unmapped_set():
+    # slow_rendering_rate is games-only, so no shape could be read back for it.
+    # The query must still reach the API and fail with the API's own message
+    # rather than one invented from a guess.
+    service = MagicMock()
+    api = _vitals(service, "vitals", "slowrenderingrate")
+    api.query.return_value.execute.return_value = {"rows": []}
+
+    _client(service).query_metric_set(PKG, "slow_rendering_rate")
+
+    body = api.query.call_args.kwargs["body"]
+    assert "metrics" not in body
+    assert "dimensions" not in body
+
+
 def test_query_metric_set_explicit_window_overrides_days_back():
     service = MagicMock()
     api = _vitals(service, "vitals", "anrrate")
@@ -569,7 +717,7 @@ def test_search_error_issues_parses_nested_versions():
         PKG,
         filter_expression="errorIssueType = CRASH",
         order_by="errorReportCount desc",
-        sample_report_limit=3,
+        sample_report_limit=1,
     )
 
     issue = issues[0]
@@ -582,7 +730,7 @@ def test_search_error_issues_parses_nested_versions():
     kwargs = issues_api.search.call_args.kwargs
     assert kwargs["parent"] == f"apps/{PKG}"
     assert kwargs["orderBy"] == "errorReportCount desc"
-    assert kwargs["sampleErrorReportLimit"] == 3
+    assert kwargs["sampleErrorReportLimit"] == 1
     assert "interval_startTime_year" in kwargs
 
 

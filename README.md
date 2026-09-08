@@ -235,6 +235,13 @@ See [Write safety](docs/write-safety.md).
   wrong answer that looks like a right one.
 - **`com.acme.free` must not collect `com.acme.freemium`'s revenue.** Attribution
   stops at a package-segment boundary.
+- **A vitals query must be aligned to its aggregation period and must not run
+  past the freshness.** A window built the obvious way — `now()` minus seven
+  days — violates both and is rejected outright, so the client truncates the
+  timestamps and clamps the end to the data that exists.
+- **The vitals API publishes no default metrics**, rejects a query without them,
+  and requires a dimension for some metric sets (`startType`, `reportType`).
+  The accepted combinations are filled in for you.
 
 ## Tools
 
