@@ -479,6 +479,23 @@ def report_freshness(
                     f"because the report does not exist, not because revenue was zero."
                 ),
             )
+        if row_count == 0:
+            # Past the publish date with nothing found. Without this the answer
+            # is "complete, zero" — the exact collapse-versus-absence confusion
+            # the not-yet-published branch above exists to prevent, reappearing
+            # the moment that branch stops applying.
+            return Freshness(
+                as_of=today,
+                requested_period=period,
+                source=SOURCE,
+                is_complete=False,
+                caveat=(
+                    f"No {kind.value} rows found for {period}, though Google published the "
+                    f"report around {available_from.isoformat()}. The account likely had no "
+                    f"{kind.value} that month, or the report object is missing from the "
+                    f"bucket — either way this is an absence, not a measured zero."
+                ),
+            )
         return Freshness(as_of=today, requested_period=period, source=SOURCE, is_complete=True)
 
     if first > today:

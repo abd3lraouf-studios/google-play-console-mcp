@@ -294,7 +294,11 @@ def test_freshness_flags_unpublished_earnings_rather_than_reporting_zero():
 
 
 def test_freshness_accepts_earnings_after_the_publication_day():
-    assert report_freshness("earnings", "2026-07", today=date(2026, 8, 20)).is_complete is True
+    # row_count is explicit: a published month that also has rows is complete.
+    # A published month with none is an absence, covered separately below.
+    fresh = report_freshness("earnings", "2026-07", today=date(2026, 8, 20), row_count=4)
+    assert fresh.is_complete is True
+    assert fresh.caveat is None
 
 
 def test_freshness_flags_a_month_that_has_not_started():
@@ -849,3 +853,26 @@ def test_get_earnings_merges_rows_from_several_objects(monkeypatch, tmp_path):
         EARNINGS_CSV
     )
     assert len(_client(storage).get_earnings("2026-07").rows) == 8
+
+
+def test_earnings_freshness_flags_an_empty_report_after_the_publish_date():
+    # Before the publish date the "not published yet" branch explains a zero.
+    # After it, an empty report used to come back complete -- reporting "$0
+    # earned" as a measurement when it is an absence. The date this runs on
+    # must not decide whether the caveat appears.
+    from datetime import date
+
+    from google_play_console_mcp.reports import report_freshness
+
+    published = report_freshness("earnings", "2026-08", today=date(2026, 9, 8), row_count=0)
+    assert published.is_complete is False
+    assert published.caveat
+    assert "absence, not a measured zero" in published.caveat
+
+    unpublished = report_freshness("earnings", "2026-08", today=date(2026, 9, 2), row_count=0)
+    assert unpublished.caveat
+
+    # A month with rows after the publish date is genuinely complete.
+    real = report_freshness("earnings", "2026-08", today=date(2026, 9, 8), row_count=12)
+    assert real.is_complete is True
+    assert real.caveat is None
