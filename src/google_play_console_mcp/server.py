@@ -817,20 +817,52 @@ def get_review(
 # =============================================================================
 
 
+def _without_regional_prices(subscription: dict[str, Any]) -> dict[str, Any]:
+    """Replace each base plan's per-region price table with a count.
+
+    A three-subscription app returns ~170KB here, of which 99.8% is
+    regionalConfigs — enough to blow the tool result size limit and make the
+    call useless. Listing subscriptions is a "what exists" question; the prices
+    answer a different one.
+    """
+    base_plans = []
+    for plan in subscription.get("base_plans") or []:
+        if not isinstance(plan, dict) or "regionalConfigs" not in plan:
+            base_plans.append(plan)
+            continue
+        summarized = {k: v for k, v in plan.items() if k != "regionalConfigs"}
+        summarized["regionalConfigCount"] = len(plan["regionalConfigs"] or [])
+        base_plans.append(summarized)
+    return {**subscription, "base_plans": base_plans}
+
+
 @mcp.tool()
-def list_subscriptions(package_name: str) -> list[dict[str, Any]]:
+def list_subscriptions(
+    package_name: str, include_regional_prices: bool = False
+) -> list[dict[str, Any]]:
     """List all subscription products for an app.
 
     Args:
         package_name: App package name
+        include_regional_prices: Include the full per-region price table for
+            every base plan. Off by default — Play carries ~170 regions per
+            base plan, which is large enough to exceed a tool result's size
+            limit on its own. Use get_subscription for one product's prices.
 
     Returns:
-        List of subscription products with their base plans
+        List of subscription products with their base plans. Each base plan
+        reports how many regions it is priced in; the prices themselves appear
+        only when include_regional_prices is set.
     """
     client = get_client_from_context()
 
     subscriptions = client.list_subscriptions(package_name)
-    return [sub.model_dump() for sub in subscriptions]
+    return [
+        _without_regional_prices(sub.model_dump())
+        if not include_regional_prices
+        else sub.model_dump()
+        for sub in subscriptions
+    ]
 
 
 @mcp.tool()

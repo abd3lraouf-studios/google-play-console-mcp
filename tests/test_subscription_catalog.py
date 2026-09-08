@@ -450,3 +450,40 @@ def test_tool_batch_update_subscriptions(monkeypatch):
     mc.batch_update_subscriptions.assert_called_once_with(
         package_name="com.example.app", requests=requests
     )
+
+
+# ---------------------------------------------------------------------------
+# Result size: the per-region price table dwarfs everything else
+# ---------------------------------------------------------------------------
+
+
+def test_list_subscriptions_summarizes_regional_prices_by_default():
+    from google_play_console_mcp.server import _without_regional_prices
+
+    subscription = {
+        "product_id": "premium",
+        "base_plans": [
+            {
+                "basePlanId": "monthly",
+                "state": "ACTIVE",
+                "regionalConfigs": [{"regionCode": "US"}, {"regionCode": "JO"}],
+            }
+        ],
+    }
+
+    trimmed = _without_regional_prices(subscription)
+
+    plan = trimmed["base_plans"][0]
+    assert "regionalConfigs" not in plan
+    assert plan["regionalConfigCount"] == 2
+    # Everything else about the plan survives — only the price table is dropped.
+    assert plan["basePlanId"] == "monthly"
+    assert plan["state"] == "ACTIVE"
+    assert subscription["base_plans"][0]["regionalConfigs"], "input must not be mutated"
+
+
+def test_list_subscriptions_leaves_a_plan_without_prices_alone():
+    from google_play_console_mcp.server import _without_regional_prices
+
+    subscription = {"product_id": "premium", "base_plans": [{"basePlanId": "monthly"}]}
+    assert _without_regional_prices(subscription) == subscription
