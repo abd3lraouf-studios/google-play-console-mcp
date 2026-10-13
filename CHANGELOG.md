@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than no step. What it was protecting against is covered directly by the
   install check above.
 
+### Fixed
+
+- `get_reviews` and `get_review` failed on every real response with a pydantic
+  `string_type` error: the Reviews API sends `androidOsVersion` as an integer
+  SDK level (e.g. `34`), while `Review.android_version` is a string. It is now
+  converted; a missing value is still `None`. The test fixtures used `"13"`,
+  which is why the suite never caught it.
+
 ## [0.4.0] - 2026-08-24
 
 ### Added
