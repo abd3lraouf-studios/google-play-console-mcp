@@ -52,7 +52,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "fastmcp==4.0.0b3",
+    "fastmcp==4.2.0a1",
     "google-api-python-client>=2.199.0",
     "google-auth>=2.56.3",
     # Play installs, ratings and earnings have no REST API: they exist only as
@@ -86,14 +86,14 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.4",
     "mypy>=2.3.1",
-    "fastmcp[code-mode]==4.0.0b3",
+    "fastmcp[code-mode]==4.2.0a1",
     # Property-based tests for the Data Safety CSV parser. Example-based tests
     # cover the formats we thought of; this covers the ones we did not, and it
     # is how the unhandled _csv.Error on an oversized field was found.
     "hypothesis>=6.165.0",
 ]
 code-mode = [
-    "fastmcp[code-mode]==4.0.0b3",
+    "fastmcp[code-mode]==4.2.0a1",
 ]
 
 [project.scripts]
