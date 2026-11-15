@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS builder
+FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd AS builder
 
 WORKDIR /build
 
@@ -21,7 +21,7 @@ COPY src/ src/
 RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --frozen --no-editable
 
 # Runtime stage
-FROM python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
+FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 LABEL org.opencontainers.image.source="https://github.com/abd3lraouf-studios/google-play-console-mcp"
 LABEL org.opencontainers.image.url="https://github.com/abd3lraouf-studios/google-play-console-mcp"
